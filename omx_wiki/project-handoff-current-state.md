@@ -18,7 +18,7 @@ Model + Harness = Agent
 
 The public website remains a public information shell. The implementation center is the Agent Console plus FastAPI backend.
 
-- 2026-08-20 `BRAND-001` Forge Harness rename completed locally. The public README, website, Console, Desktop, API/OpenAPI metadata, active product docs, and release links now use Forge Harness; `HARNESS_*`, `agent-harness`, and other runtime identifiers remain compatible. The GitHub repository rename to `luohao0308/forge-harness` is the final external step for this handoff.
+- 2026-08-20 `BRAND-001` Forge Harness rename completed. The public README, website, Console, Desktop, API/OpenAPI metadata, active product docs, release links, and GitHub repository now use Forge Harness; `HARNESS_*`, `agent-harness`, and other runtime identifiers remain compatible.
 
 - 2026-08-18 `DESK-004` Trigger 与后台自动化完成。Webhook、schedule、file、git 统一进入持久化 invocation/Run 路径，具备幂等、租约、fencing、同 Run 重试、kill switch、审批/取消/恢复同步和 local/server worker；file/git 仅访问可信 Desktop workspace，所有 execute/resume/orchestration 旁路 fail closed。Desktop 管理、一次性 secret、调用历史、OpenAPI、迁移、全量后端、Console、Desktop、Compose 和宽窄屏验证通过。路线已推进到 `DESK-005`，`REL-001` 保持外部阻塞。见 [[session-2026-08-18-desktop-trigger-automation]]。
 - 2026-08-19 `DESK-005` 项目知识自动索引完成。Desktop 以 Profile 隔离可信根目录，按安全默认 ignore 和确定性预算生成完整 snapshot；API 以持久化收据完成新增、版本、tombstone、暂停/恢复/解绑，截断扫描不删除；Knowledge 工作台和后台协调器覆盖首次、变化、重启、Profile/root 竞态，首次绑定创建/同步可在 Profile 切换时中止并通过同 key 补偿解绑清理已提交 create，Run Detail 显示安全 `project://`、SHA-256 和文档版本。后端 `53`、Desktop `339`、Console 聚焦 `24` 项及迁移、OpenAPI、Feature Catalog、宽窄屏、docs/diff 门禁通过，最终独立复审 `PASS`。路线下一项为 pending 的 `DESK-006`，`REL-001` 继续外部阻塞。见 [[session-2026-08-18-desktop-project-knowledge-discovery]]。

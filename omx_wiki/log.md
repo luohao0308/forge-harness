@@ -2,7 +2,7 @@
 
 ## 2026-08-20
 
-- Completed `BRAND-001` locally: adopted Forge Harness as the public product name, refreshed README, website, Console, Desktop, API/OpenAPI metadata, active product docs, release links, and GitHub release configuration while preserving `HARNESS_*` and `agent-harness` runtime compatibility identifiers. The online repository rename is recorded in the current handoff and verified separately.
+- Completed `BRAND-001`: adopted Forge Harness as the public product name and refreshed the README, website, Console, Desktop, API/OpenAPI metadata, active product docs, release links, and GitHub release configuration while preserving `HARNESS_*` and `agent-harness` runtime compatibility identifiers.
 
 ## 2026-08-19
 
