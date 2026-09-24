@@ -2467,6 +2467,23 @@ class AdminAuditEvent(Base):
                 "AND resource_type = 'desktop_change_review'"
             ),
         ),
+        Index(
+            "admin_audit_events_git_worktree_uidx",
+            "organization_id",
+            "event_type",
+            "resource_type",
+            "resource_id",
+            "action",
+            unique=True,
+            sqlite_where=text(
+                "event_type = 'DESKTOP_GIT_WORKTREE_AUDITED' "
+                "AND resource_type = 'desktop_git_worktree'"
+            ),
+            postgresql_where=text(
+                "event_type = 'DESKTOP_GIT_WORKTREE_AUDITED' "
+                "AND resource_type = 'desktop_git_worktree'"
+            ),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)

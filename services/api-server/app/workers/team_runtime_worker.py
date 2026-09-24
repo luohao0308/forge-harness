@@ -12,12 +12,12 @@ from datetime import UTC, datetime, timedelta
 from threading import Lock
 from uuid import uuid4
 
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings, validate_startup_settings
 from app.db.models import Team, TeamAgent, TeamGoal, TeamMailboxMessage, TeamTask, utc_now
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, create_database_engine
 from app.teams.goal_supervisor import AUTO_SUPERVISED_GOAL_STATUSES, normalize_goal_json
 from app.teams.model_runtime import TeamModelRuntime
 from app.teams.service import WAKE_TIMEOUT_SECONDS, TeamSessionService
@@ -120,8 +120,10 @@ class ProcessPoolTeamWakeExecutionBackend(TeamWakeExecutionBackend):
 
 def _execute_team_wake_in_child_process(request: TeamWakeExecutionRequest) -> dict:
     database_url = request.database_url or get_settings().database_url
-    connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
-    engine = create_engine(database_url, pool_pre_ping=True, connect_args=connect_args)
+    # Child wake processes use the same SQLite file as the desktop API. Reuse
+    # the central engine factory so WAL, foreign keys, and busy_timeout are
+    # applied before concurrent workers attempt their first write.
+    engine = create_database_engine(database_url)
     LocalSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     try:
         with LocalSession() as session:

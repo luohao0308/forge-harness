@@ -188,6 +188,8 @@ class TeamMessageCreateRequest(BaseModel):
     summary: str | None = None
     files: list[str] = Field(default_factory=list)
     mode: Literal["chat", "markdown_plan", "plan", "goal"] = "chat"
+    reasoning_effort: Literal["light", "medium", "high", "xhigh", "max"] = "high"
+    permission_mode: Literal["confirm", "auto-edit", "full-auto"] = "confirm"
 
     @field_validator("mode", mode="before")
     @classmethod
@@ -211,6 +213,7 @@ class TeamTaskCreateRequest(BaseModel):
 
 
 class TeamTaskUpdateRequest(BaseModel):
+    subject: str | None = Field(default=None, min_length=1, max_length=240)
     status: Literal["pending", "in_progress", "completed", "deleted"] | None = None
     owner_slot_id: str | None = Field(
         default=None,
@@ -335,8 +338,8 @@ def _team_response(team: Team, service: TeamSessionService) -> TeamResponse:
         active_goal=_goal_response(service.active_goal(team.id)),
         unread_counts=service.unread_counts(messages),
         team_tools=sorted(TEAM_TOOL_NAMES),
-        created_at=team.created_at.isoformat() if team.created_at else None,
-        updated_at=team.updated_at.isoformat() if team.updated_at else None,
+        created_at=_iso_utc(team.created_at),
+        updated_at=_iso_utc(team.updated_at),
     )
 
 
@@ -371,8 +374,8 @@ def _agent_response(
             _session_message_response(message) for message in (session_messages or [])
         ],
         metadata_json=metadata_json,
-        created_at=agent.created_at.isoformat() if agent.created_at else None,
-        updated_at=agent.updated_at.isoformat() if agent.updated_at else None,
+        created_at=_iso_utc(agent.created_at),
+        updated_at=_iso_utc(agent.updated_at),
     )
 
 
@@ -386,6 +389,13 @@ def _parse_iso_datetime(value: object) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed
+
+
+def _iso_utc(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+    return normalized.isoformat().replace("+00:00", "Z")
 
 
 def _has_completed_wake_turn(wake_state: dict, session_messages: list[AgentMessage]) -> bool:
@@ -413,7 +423,7 @@ def _session_message_response(message: AgentMessage) -> TeamAgentSessionMessageR
         role=message.role,
         content=message.content,
         metadata_json=message.metadata_json,
-        created_at=message.created_at.isoformat() if message.created_at else None,
+        created_at=_iso_utc(message.created_at),
     )
 
 
@@ -429,7 +439,7 @@ def _message_response(message: TeamMailboxMessage) -> TeamMailboxMessageResponse
         read=message.read,
         files_json=message.files_json,
         metadata_json=message.metadata_json,
-        created_at=message.created_at.isoformat() if message.created_at else None,
+        created_at=_iso_utc(message.created_at),
     )
 
 
@@ -444,8 +454,8 @@ def _task_response(task: TeamTask) -> TeamTaskResponse:
         blocked_by_json=task.blocked_by_json,
         blocks_json=task.blocks_json,
         metadata_json=task.metadata_json,
-        created_at=task.created_at.isoformat() if task.created_at else None,
-        updated_at=task.updated_at.isoformat() if task.updated_at else None,
+        created_at=_iso_utc(task.created_at),
+        updated_at=_iso_utc(task.updated_at),
     )
 
 
@@ -458,7 +468,7 @@ def _event_response(event: TeamEvent) -> TeamEventResponse:
         payload_json=event.payload_json,
         actor_type=event.actor_type,
         actor_id=event.actor_id,
-        created_at=event.created_at.isoformat() if event.created_at else None,
+        created_at=_iso_utc(event.created_at),
     )
 
 
@@ -478,9 +488,9 @@ def _goal_response(goal: TeamGoal | None) -> TeamGoalResponse | None:
         progress_json=dict(goal.progress_json or {}),
         supervisor_state_json=dict(goal.supervisor_state_json or {}),
         version=goal.version,
-        created_at=goal.created_at.isoformat() if goal.created_at else None,
-        updated_at=goal.updated_at.isoformat() if goal.updated_at else None,
-        completed_at=goal.completed_at.isoformat() if goal.completed_at else None,
+        created_at=_iso_utc(goal.created_at),
+        updated_at=_iso_utc(goal.updated_at),
+        completed_at=_iso_utc(goal.completed_at),
     )
 
 
@@ -702,6 +712,8 @@ def send_team_message(
         summary=request.summary,
         files=request.files,
         mode=request.mode,
+        reasoning_effort=request.reasoning_effort,
+        permission_mode=request.permission_mode,
         wake_recipient=False,
     )
     session.commit()
@@ -794,6 +806,7 @@ def update_team_task(
     task = service.update_task(
         team_id=team_id,
         task_id=task_id,
+        subject=request.subject,
         status_value=request.status,
         owner_slot_id=(
             request.owner_slot_id if "owner_slot_id" in request.model_fields_set else None

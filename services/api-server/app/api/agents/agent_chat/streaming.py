@@ -184,9 +184,17 @@ def stream_agent_chat_run(
         {
             "source": "local_agent_bridge_stream",
             "local_bridge_task_id": local_bridge_task_id,
+            "reasoning_effort_requested": request.reasoning_effort,
+            "permission_mode_requested": request.permission_mode,
+            "permission_mode_effective": request.permission_mode,
         }
         if stream_context is not None and local_bridge_task_id
-        else None
+        else {
+            "source": "workspace_chat",
+            "reasoning_effort_requested": request.reasoning_effort,
+            "permission_mode_requested": request.permission_mode,
+            "permission_mode_effective": "confirm",
+        }
     )
     if stream_context is not None:
         _consume_local_bridge_stream_token(
@@ -400,6 +408,7 @@ def stream_agent_chat_run(
                 ModelRequest(
                     model_provider=run.model_provider,
                     model_name=run.model_name,
+                    reasoning_effort=request.reasoning_effort,
                     response_format="text",
                     messages=messages,
                 )
@@ -761,6 +770,7 @@ def stream_agent_chat_run(
                         run=run,
                         goal=goal,
                         evidence=evidence,
+                        reasoning_effort=request.reasoning_effort,
                     )
                 )
                 for chunk in chunks:
@@ -884,11 +894,13 @@ def stream_agent_chat_run(
         run: Task,
         goal: str,
         evidence: list[dict[str, str]],
+        reasoning_effort: str = "high",
     ) -> ModelRequest:
         evidence_text = _workspace_goal_evidence_prompt(evidence)
         return ModelRequest(
             model_provider=run.model_provider,
             model_name=run.model_name,
+            reasoning_effort=reasoning_effort,
             response_format="text",
             messages=[
                 ModelMessage(

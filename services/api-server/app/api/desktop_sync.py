@@ -138,6 +138,38 @@ class DesktopChangeReviewAuditResponse(BaseModel):
     phase: Literal["requested", "completed", "failed"]
 
 
+class DesktopGitWorktreeAuditRequest(BaseModel):
+    operation_id: str = Field(min_length=1, max_length=128)
+    phase: Literal["requested", "completed", "failed"]
+    action: Literal["create", "switch", "remove", "prune"]
+    path: str = Field(min_length=1, max_length=512)
+    target_path: str | None = Field(default=None, max_length=512)
+    preview_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    error_code: str | None = Field(default=None, max_length=256)
+
+    @field_validator("path", "target_path")
+    @classmethod
+    def validate_relative_path(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        parts = value.split("/")
+        if (
+            value.startswith(("/", "\\"))
+            or "\\" in value
+            or any(part in {"", ".."} for part in parts)
+        ):
+            raise ValueError("path must be a normalized relative worktree path")
+        return value
+
+
+class DesktopGitWorktreeAuditResponse(BaseModel):
+    accepted: bool
+    audit_id: str
+    event_id: str | None = None
+    operation_id: str
+    phase: Literal["requested", "completed", "failed"]
+
+
 class SyncOperation(BaseModel):
     """A single operation to apply during sync."""
 
@@ -802,6 +834,96 @@ def record_desktop_change_review_audit(
         accepted=True,
         audit_id=audit.id,
         event_id=event_id,
+        operation_id=request.operation_id,
+        phase=request.phase,
+    )
+
+
+@router.post(
+    "/git-worktree/audit",
+    response_model=DesktopGitWorktreeAuditResponse,
+)
+def record_desktop_git_worktree_audit(
+    request: DesktopGitWorktreeAuditRequest,
+    session: DbSession,
+    principal: Principal,
+) -> DesktopGitWorktreeAuditResponse:
+    """Persist an organization-scoped audit record for a safe local Worktree lifecycle operation."""
+    require_role(principal, {"admin", "engineer"})
+    audit_action = f"desktop.git_worktree.{request.phase}"
+    existing = session.execute(
+        select(AdminAuditEvent).where(
+            AdminAuditEvent.organization_id == principal.organization_id,
+            AdminAuditEvent.event_type == EventType.DESKTOP_GIT_WORKTREE_AUDITED.value,
+            AdminAuditEvent.resource_type == "desktop_git_worktree",
+            AdminAuditEvent.resource_id == request.operation_id,
+            AdminAuditEvent.action == audit_action,
+        )
+    ).scalar_one_or_none()
+    identity = {
+        "action": request.action,
+        "path": request.path,
+        "target_path": request.target_path,
+        "preview_sha256": request.preview_sha256,
+    }
+    if existing is not None:
+        persisted_identity = {field: existing.payload_json.get(field) for field in identity}
+        if persisted_identity != identity:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Git Worktree operation identity does not match",
+            )
+        return DesktopGitWorktreeAuditResponse(
+            accepted=True,
+            audit_id=existing.id,
+            event_id=existing.payload_json.get("event_id"),
+            operation_id=request.operation_id,
+            phase=request.phase,
+        )
+    payload = request.model_dump(exclude_none=True)
+    audit = AdminAuditEvent(
+        organization_id=principal.organization_id,
+        actor_id=principal.user_id,
+        event_type=EventType.DESKTOP_GIT_WORKTREE_AUDITED.value,
+        resource_type="desktop_git_worktree",
+        resource_id=request.operation_id,
+        action=audit_action,
+        payload_json={**payload, "event_id": None},
+    )
+    session.add(audit)
+    try:
+        session.commit()
+    except IntegrityError as error:
+        session.rollback()
+        existing = session.execute(
+            select(AdminAuditEvent).where(
+                AdminAuditEvent.organization_id == principal.organization_id,
+                AdminAuditEvent.event_type == EventType.DESKTOP_GIT_WORKTREE_AUDITED.value,
+                AdminAuditEvent.resource_type == "desktop_git_worktree",
+                AdminAuditEvent.resource_id == request.operation_id,
+                AdminAuditEvent.action == audit_action,
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            raise error
+        persisted_identity = {field: existing.payload_json.get(field) for field in identity}
+        if persisted_identity != identity:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Git Worktree operation identity does not match",
+            ) from error
+        return DesktopGitWorktreeAuditResponse(
+            accepted=True,
+            audit_id=existing.id,
+            event_id=existing.payload_json.get("event_id"),
+            operation_id=request.operation_id,
+            phase=request.phase,
+        )
+    session.refresh(audit)
+    return DesktopGitWorktreeAuditResponse(
+        accepted=True,
+        audit_id=audit.id,
+        event_id=None,
         operation_id=request.operation_id,
         phase=request.phase,
     )

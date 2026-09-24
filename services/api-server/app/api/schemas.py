@@ -617,6 +617,14 @@ class AgentChatStreamRequest(BaseModel):
     goal: str | None = Field(default=None, description="用户目标")
     model_provider: str | None = Field(default=None, description="本次请求选择的模型供应商")
     model_name: str | None = Field(default=None, description="本次请求选择的模型名称")
+    reasoning_effort: Literal["light", "medium", "high", "xhigh", "max"] = Field(
+        default="high",
+        description="本次请求的规范化推理强度；仅在 provider 声明支持时转发",
+    )
+    permission_mode: Literal["confirm", "auto-edit", "full-auto"] = Field(
+        default="confirm",
+        description="本次请求的权限意图；服务端策略仍可收紧云端执行权限",
+    )
     enable_sandbox: bool = Field(default=False, description="本次 Workspace Run 是否启用容器沙箱")
     enable_network: bool = Field(default=False, description="本次 Workspace Run 是否启用网络访问")
     messages: list[ConversationNode] = Field(default_factory=list, description="当前分支消息")
@@ -3199,6 +3207,14 @@ class LocalAgentSendMessageRequest(BaseModel):
     )
     model_provider: str | None = Field(default=None, description="本次请求选择的模型供应商")
     model_name: str | None = Field(default=None, description="本次请求选择的模型名称")
+    reasoning_effort: Literal["light", "medium", "high", "xhigh", "max"] = Field(
+        default="high",
+        description="本次请求的规范化推理强度；由本地 Agent 能力决定是否使用",
+    )
+    permission_mode: Literal["confirm", "auto-edit", "full-auto"] = Field(
+        default="confirm",
+        description="本地 Agent 权限模式",
+    )
     messages: list[ConversationNode] = Field(default_factory=list, description="当前分支消息")
     active_leaf_id: str | None = Field(default=None, description="当前活动叶子节点")
     active_branch_id: str | None = Field(default=None, description="前端当前分支 ID")

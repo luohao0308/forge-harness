@@ -284,6 +284,106 @@ def test_tool_runner_replays_write_tool_by_idempotency_key(db_session: Session) 
     assert second.output["original_tool_call_id"] == first.tool_call.id
 
 
+def _configure_high_risk_auto_policy(db_session: Session, task: Task) -> None:
+    db_session.add(
+        SystemSetting(
+            organization_id=task.organization_id,
+            key="settings.policies",
+            value_json={
+                "risk_levels": [
+                    {
+                        "name": "high",
+                        "requires_sandbox": False,
+                        "approval": "auto",
+                        "allowed_roles": ["admin", "engineer"],
+                    }
+                ],
+                "approvals": {"manual_review": True, "deny_on_missing_policy": True},
+                "sandbox": {"default_network": False, "default_timeout_seconds": 60},
+                "audit": {"model_calls": True, "tool_calls": True, "policy_actions": True},
+            },
+            updated_by="test",
+            updated_at=utc_now(),
+        )
+    )
+    db_session.flush()
+
+
+def test_tool_runner_github_write_requires_idempotency_key(db_session: Session) -> None:
+    task = create_task(db_session, tools=["github.create_issue"])
+    _configure_high_risk_auto_policy(db_session, task)
+
+    execution = ToolRunner(session=db_session, agent_id=task.agent_id).execute(
+        task_id=task.id,
+        tool_name="github.create_issue",
+        input_json={"repo": "acme/repo", "title": "missing key"},
+        roles=["admin", "engineer"],
+    )
+
+    assert execution.allowed is False
+    assert execution.tool_call.status == "DENIED"
+    assert execution.tool_call.error_message == "non-idempotent MCP tool requires idempotency_key"
+
+
+def test_tool_runner_github_write_replays_success_but_not_provider_error(
+    db_session: Session,
+) -> None:
+    task = create_task(db_session, tools=["github.create_issue"])
+    _configure_high_risk_auto_policy(db_session, task)
+
+    class FakeGitHubAdapter:
+        calls = 0
+
+        def execute(self, **kwargs):
+            from app.tools.mcp_adapter import MCPToolResult
+
+            self.calls += 1
+            if kwargs["input_json"].get("title") == "timeout":
+                return MCPToolResult(
+                    server="github",
+                    method="create_issue",
+                    output_json={"error": "timeout"},
+                )
+            return MCPToolResult(
+                server="github",
+                method="create_issue",
+                output_json={"issue": {"number": 42}, "source": "github-api"},
+            )
+
+    adapter = FakeGitHubAdapter()
+    runner = ToolRunner(session=db_session, agent_id=task.agent_id, mcp_adapter=adapter)
+    first = runner.execute(
+        task_id=task.id,
+        tool_name="github.create_issue",
+        input_json={"repo": "acme/repo", "title": "created", "idempotency_key": "issue-42"},
+        roles=["admin", "engineer"],
+    )
+    second = runner.execute(
+        task_id=task.id,
+        tool_name="github.create_issue",
+        input_json={"repo": "acme/repo", "title": "created", "idempotency_key": "issue-42"},
+        roles=["admin", "engineer"],
+    )
+    failed = runner.execute(
+        task_id=task.id,
+        tool_name="github.create_issue",
+        input_json={"repo": "acme/repo", "title": "timeout", "idempotency_key": "issue-timeout"},
+        roles=["admin", "engineer"],
+    )
+    retried_failure = runner.execute(
+        task_id=task.id,
+        tool_name="github.create_issue",
+        input_json={"repo": "acme/repo", "title": "timeout", "idempotency_key": "issue-timeout"},
+        roles=["admin", "engineer"],
+    )
+
+    assert first.tool_call.status == "SUCCESS"
+    assert second.output["idempotent_replay"] is True
+    assert failed.output["result"]["error"] == "timeout"
+    assert retried_failure.output["result"]["error"] == "timeout"
+    assert adapter.calls == 3
+
+
 def test_tool_runner_denies_sandbox_tool_without_sandbox(db_session: Session) -> None:
     task = create_task(db_session)
 

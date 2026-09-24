@@ -29,6 +29,7 @@ class TeamModelRuntime(Protocol):
         model_provider: str,
         model_name: str,
         messages: list[ModelMessage],
+        reasoning_effort: str | None = None,
     ) -> ModelResponse:
         """Run one normal Team conversation turn."""
 
@@ -39,6 +40,7 @@ class TeamModelRuntime(Protocol):
         model_provider: str,
         model_name: str,
         messages: list[ModelMessage],
+        reasoning_effort: str | None = None,
     ) -> Iterator[ModelStreamChunk]:
         """Stream one Team conversation turn."""
 
@@ -54,6 +56,7 @@ class GatewayTeamModelRuntime:
         model_provider: str,
         model_name: str,
         messages: list[ModelMessage],
+        reasoning_effort: str | None = None,
     ) -> ModelResponse:
         provider_name, resolved_model_name, provider = self._resolved_provider(
             organization_id=organization_id,
@@ -66,6 +69,7 @@ class GatewayTeamModelRuntime:
                 model_name=resolved_model_name,
                 response_format="text",
                 messages=messages,
+                reasoning_effort=reasoning_effort,
             )
         )
         return response.model_copy(
@@ -82,6 +86,7 @@ class GatewayTeamModelRuntime:
         model_provider: str,
         model_name: str,
         messages: list[ModelMessage],
+        reasoning_effort: str | None = None,
     ) -> Iterator[ModelStreamChunk]:
         provider_name, resolved_model_name, provider = self._resolved_provider(
             organization_id=organization_id,
@@ -94,6 +99,7 @@ class GatewayTeamModelRuntime:
                 model_name=resolved_model_name,
                 response_format="text",
                 messages=messages,
+                reasoning_effort=reasoning_effort,
             )
         )
 

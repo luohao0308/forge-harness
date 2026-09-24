@@ -50,21 +50,37 @@ class GitHubAdapter:
         if not token:
             return AdapterResult({"error": "missing_secret", "message": "GitHub token is required"})
         if self.method == "list_issues":
-            output = _list_issues(endpoint=endpoint, token=token, input_json=input_json)
+            output = _list_issues(
+                endpoint=endpoint, token=token, input_json=input_json, config_json=config_json
+            )
         elif self.method == "get_issue":
-            output = _get_issue(endpoint=endpoint, token=token, input_json=input_json)
+            output = _get_issue(
+                endpoint=endpoint, token=token, input_json=input_json, config_json=config_json
+            )
         elif self.method == "list_pulls":
-            output = _list_pulls(endpoint=endpoint, token=token, input_json=input_json)
+            output = _list_pulls(
+                endpoint=endpoint, token=token, input_json=input_json, config_json=config_json
+            )
         elif self.method == "get_pull":
-            output = _get_pull(endpoint=endpoint, token=token, input_json=input_json)
+            output = _get_pull(
+                endpoint=endpoint, token=token, input_json=input_json, config_json=config_json
+            )
         elif self.method == "search_code":
-            output = _search_code(endpoint=endpoint, token=token, input_json=input_json)
+            output = _search_code(
+                endpoint=endpoint, token=token, input_json=input_json, config_json=config_json
+            )
         elif self.method == "create_issue_comment":
-            output = _create_issue_comment(endpoint=endpoint, token=token, input_json=input_json)
+            output = _create_issue_comment(
+                endpoint=endpoint, token=token, input_json=input_json, config_json=config_json
+            )
         elif self.method == "create_issue":
-            output = _create_issue(endpoint=endpoint, token=token, input_json=input_json)
+            output = _create_issue(
+                endpoint=endpoint, token=token, input_json=input_json, config_json=config_json
+            )
         elif self.method == "create_pull_review":
-            output = _create_pull_review(endpoint=endpoint, token=token, input_json=input_json)
+            output = _create_pull_review(
+                endpoint=endpoint, token=token, input_json=input_json, config_json=config_json
+            )
         else:
             output = {"error": "unsupported_method", "message": self.method}
         return AdapterResult(output)
@@ -90,7 +106,14 @@ class GitHubAdapter:
                 response = client.get(f"{endpoint}/rate_limit")
             if response.status_code >= 400:
                 return _github_error(response)
-            payload = response.json()
+            try:
+                payload = response.json()
+            except ValueError:
+                return {
+                    "error": "github_api_error",
+                    "status": response.status_code,
+                    "message": "Invalid JSON",
+                }
             core = payload.get("resources", {}).get("core", {}) if isinstance(payload, dict) else {}
             return {
                 "rate_remaining": core.get("remaining"),
@@ -289,7 +312,7 @@ def _client(endpoint: str, token: str, config_json: dict[str, Any] | None = None
 
 def _validate_repo(repo: Any) -> str | None:
     value = str(repo or "").strip()
-    if not REPO_PATTERN.match(value):
+    if not REPO_PATTERN.match(value) or any(part in {".", ".."} for part in value.split("/")):
         return None
     return value
 
@@ -307,9 +330,10 @@ def _request_json(
     token: str,
     path: str,
     params: dict[str, Any] | None = None,
+    config_json: dict[str, Any] | None = None,
 ) -> dict[str, Any] | list[Any]:
     try:
-        with _client(endpoint, token) as client:
+        with _client(endpoint, token, config_json) as client:
             response = client.get(f"{endpoint}{path}", params=params or {})
     except httpx.TimeoutException:
         return {"error": "timeout", "message": "GitHub API request timed out"}
@@ -334,30 +358,26 @@ def _request_write_json(
     token: str,
     path: str,
     payload: dict[str, Any],
+    config_json: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    last_error: dict[str, Any] | None = None
-    for _attempt in range(3):
-        try:
-            with _client(endpoint, token) as client:
-                response = client.post(f"{endpoint}{path}", json=payload)
-        except httpx.TimeoutException:
-            last_error = {"error": "timeout", "message": "GitHub API request timed out"}
-            continue
-        except httpx.RequestError as exc:
-            last_error = {"error": "github_request_error", "message": str(exc)[:300]}
-            continue
-        if response.status_code >= 400:
-            return _github_error(response)
-        try:
-            decoded = response.json()
-        except ValueError:
-            return {
-                "error": "github_api_error",
-                "status": response.status_code,
-                "message": "Invalid JSON",
-            }
-        return decoded if isinstance(decoded, dict) else {}
-    return last_error or {"error": "github_request_error", "message": "GitHub request failed"}
+    try:
+        with _client(endpoint, token, config_json) as client:
+            response = client.post(f"{endpoint}{path}", json=payload)
+    except httpx.TimeoutException:
+        return {"error": "timeout", "message": "GitHub API request timed out"}
+    except httpx.RequestError as exc:
+        return {"error": "github_request_error", "message": str(exc)[:300]}
+    if response.status_code >= 400:
+        return _github_error(response)
+    try:
+        decoded = response.json()
+    except ValueError:
+        return {
+            "error": "github_api_error",
+            "status": response.status_code,
+            "message": "Invalid JSON",
+        }
+    return decoded if isinstance(decoded, dict) else {}
 
 
 def _github_error(response: httpx.Response) -> dict[str, Any]:
@@ -378,7 +398,9 @@ def _github_error(response: httpx.Response) -> dict[str, Any]:
     return {"error": "github_api_error", "status": response.status_code, "message": message}
 
 
-def _list_issues(*, endpoint: str, token: str, input_json: dict[str, Any]) -> dict[str, Any]:
+def _list_issues(
+    *, endpoint: str, token: str, input_json: dict[str, Any], config_json: dict[str, Any] | None
+) -> dict[str, Any]:
     repo = _validate_repo(input_json.get("repo"))
     if repo is None:
         return {"error": "invalid_input", "message": "repo must be in owner/repo format"}
@@ -391,7 +413,11 @@ def _list_issues(*, endpoint: str, token: str, input_json: dict[str, Any]) -> di
     if labels:
         params["labels"] = labels
     payload = _request_json(
-        endpoint=endpoint, token=token, path=f"/repos/{repo}/issues", params=params
+        endpoint=endpoint,
+        token=token,
+        path=f"/repos/{repo}/issues",
+        params=params,
+        config_json=config_json,
     )
     if isinstance(payload, dict) and payload.get("error"):
         return payload
@@ -403,12 +429,19 @@ def _list_issues(*, endpoint: str, token: str, input_json: dict[str, Any]) -> di
     return {"items": items[:limit], "source": "github-api", "tool": "github.list_issues"}
 
 
-def _get_issue(*, endpoint: str, token: str, input_json: dict[str, Any]) -> dict[str, Any]:
+def _get_issue(
+    *, endpoint: str, token: str, input_json: dict[str, Any], config_json: dict[str, Any] | None
+) -> dict[str, Any]:
     repo = _validate_repo(input_json.get("repo"))
     number = _positive_int(input_json.get("number"))
     if repo is None or number is None:
         return {"error": "invalid_input", "message": "repo and positive issue number are required"}
-    issue = _request_json(endpoint=endpoint, token=token, path=f"/repos/{repo}/issues/{number}")
+    issue = _request_json(
+        endpoint=endpoint,
+        token=token,
+        path=f"/repos/{repo}/issues/{number}",
+        config_json=config_json,
+    )
     if isinstance(issue, dict) and issue.get("error"):
         return issue
     comments: list[dict[str, Any]] = []
@@ -418,6 +451,7 @@ def _get_issue(*, endpoint: str, token: str, input_json: dict[str, Any]) -> dict
             token=token,
             path=f"/repos/{repo}/issues/{number}/comments",
             params={"per_page": 50},
+            config_json=config_json,
         )
         if isinstance(comment_payload, dict) and comment_payload.get("error"):
             return comment_payload
@@ -438,7 +472,9 @@ def _get_issue(*, endpoint: str, token: str, input_json: dict[str, Any]) -> dict
     }
 
 
-def _list_pulls(*, endpoint: str, token: str, input_json: dict[str, Any]) -> dict[str, Any]:
+def _list_pulls(
+    *, endpoint: str, token: str, input_json: dict[str, Any], config_json: dict[str, Any] | None
+) -> dict[str, Any]:
     repo = _validate_repo(input_json.get("repo"))
     if repo is None:
         return {"error": "invalid_input", "message": "repo must be in owner/repo format"}
@@ -448,6 +484,7 @@ def _list_pulls(*, endpoint: str, token: str, input_json: dict[str, Any]) -> dic
         token=token,
         path=f"/repos/{repo}/pulls",
         params={"state": str(input_json.get("state") or "open"), "per_page": limit},
+        config_json=config_json,
     )
     if isinstance(payload, dict) and payload.get("error"):
         return payload
@@ -458,12 +495,19 @@ def _list_pulls(*, endpoint: str, token: str, input_json: dict[str, Any]) -> dic
     }
 
 
-def _get_pull(*, endpoint: str, token: str, input_json: dict[str, Any]) -> dict[str, Any]:
+def _get_pull(
+    *, endpoint: str, token: str, input_json: dict[str, Any], config_json: dict[str, Any] | None
+) -> dict[str, Any]:
     repo = _validate_repo(input_json.get("repo"))
     number = _positive_int(input_json.get("number"))
     if repo is None or number is None:
         return {"error": "invalid_input", "message": "repo and positive PR number are required"}
-    pull = _request_json(endpoint=endpoint, token=token, path=f"/repos/{repo}/pulls/{number}")
+    pull = _request_json(
+        endpoint=endpoint,
+        token=token,
+        path=f"/repos/{repo}/pulls/{number}",
+        config_json=config_json,
+    )
     if isinstance(pull, dict) and pull.get("error"):
         return pull
     files_payload = _request_json(
@@ -471,6 +515,7 @@ def _get_pull(*, endpoint: str, token: str, input_json: dict[str, Any]) -> dict[
         token=token,
         path=f"/repos/{repo}/pulls/{number}/files",
         params={"per_page": MAX_LIST_LIMIT},
+        config_json=config_json,
     )
     if isinstance(files_payload, dict) and files_payload.get("error"):
         return files_payload
@@ -478,8 +523,8 @@ def _get_pull(*, endpoint: str, token: str, input_json: dict[str, Any]) -> dict[
         {
             "filename": str(file.get("filename") or ""),
             "status": str(file.get("status") or ""),
-            "additions": int(file.get("additions") or 0),
-            "deletions": int(file.get("deletions") or 0),
+            "additions": _nonnegative_int(file.get("additions")),
+            "deletions": _nonnegative_int(file.get("deletions")),
             "patch_preview": _truncate(str(file.get("patch") or ""), PATCH_PREVIEW_CHARS),
         }
         for file in files_payload
@@ -493,7 +538,9 @@ def _get_pull(*, endpoint: str, token: str, input_json: dict[str, Any]) -> dict[
     }
 
 
-def _search_code(*, endpoint: str, token: str, input_json: dict[str, Any]) -> dict[str, Any]:
+def _search_code(
+    *, endpoint: str, token: str, input_json: dict[str, Any], config_json: dict[str, Any] | None
+) -> dict[str, Any]:
     query = str(input_json.get("query") or "").strip()
     if not query:
         return {"error": "invalid_input", "message": "query is required"}
@@ -501,16 +548,27 @@ def _search_code(*, endpoint: str, token: str, input_json: dict[str, Any]) -> di
     if repo and not _validate_repo(repo):
         return {"error": "invalid_input", "message": "repo must be in owner/repo format"}
     language = str(input_json.get("language") or "").strip()
-    if repo:
-        query = f"{query} repo:{repo}"
-    if language:
-        query = f"{query} language:{language}"
+    qualifiers = " ".join(
+        qualifier
+        for qualifier in (
+            f"repo:{repo}" if repo else "",
+            f"language:{language}" if language else "",
+        )
+        if qualifier
+    )
+    if len(qualifiers) >= 400:
+        return {"error": "invalid_input", "message": "search qualifiers are too long"}
+    if qualifiers:
+        query = f"{query[: max(0, 400 - len(qualifiers) - 1)]} {qualifiers}".strip()
+    else:
+        query = query[:400]
     limit = _limit(input_json.get("limit"))
     payload = _request_json(
         endpoint=endpoint,
         token=token,
         path="/search/code",
         params={"q": query[:400], "per_page": limit},
+        config_json=config_json,
     )
     if isinstance(payload, dict) and payload.get("error"):
         return payload
@@ -538,6 +596,7 @@ def _create_issue_comment(
     endpoint: str,
     token: str,
     input_json: dict[str, Any],
+    config_json: dict[str, Any] | None,
 ) -> dict[str, Any]:
     repo = _validate_repo(input_json.get("repo"))
     number = _positive_int(input_json.get("number"))
@@ -549,6 +608,7 @@ def _create_issue_comment(
         token=token,
         path=f"/repos/{repo}/issues/{number}/comments",
         payload={"body": body[:65536]},
+        config_json=config_json,
     )
     if payload.get("error"):
         return payload
@@ -559,7 +619,9 @@ def _create_issue_comment(
     }
 
 
-def _create_issue(*, endpoint: str, token: str, input_json: dict[str, Any]) -> dict[str, Any]:
+def _create_issue(
+    *, endpoint: str, token: str, input_json: dict[str, Any], config_json: dict[str, Any] | None
+) -> dict[str, Any]:
     repo = _validate_repo(input_json.get("repo"))
     title = str(input_json.get("title") or "").strip()
     if repo is None or not title:
@@ -579,6 +641,7 @@ def _create_issue(*, endpoint: str, token: str, input_json: dict[str, Any]) -> d
         token=token,
         path=f"/repos/{repo}/issues",
         payload=payload,
+        config_json=config_json,
     )
     if result.get("error"):
         return result
@@ -590,6 +653,7 @@ def _create_pull_review(
     endpoint: str,
     token: str,
     input_json: dict[str, Any],
+    config_json: dict[str, Any] | None,
 ) -> dict[str, Any]:
     repo = _validate_repo(input_json.get("repo"))
     number = _positive_int(input_json.get("number"))
@@ -608,6 +672,7 @@ def _create_pull_review(
         token=token,
         path=f"/repos/{repo}/pulls/{number}/reviews",
         payload=payload,
+        config_json=config_json,
     )
     if result.get("error"):
         return result
@@ -677,6 +742,13 @@ def _positive_int(value: Any) -> int | None:
     except (TypeError, ValueError):
         return None
     return parsed if parsed > 0 else None
+
+
+def _nonnegative_int(value: Any) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _truncate(value: str, limit: int) -> str:

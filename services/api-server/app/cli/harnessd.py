@@ -87,7 +87,10 @@ RENDERER_SECURITY_HEADERS = {
         "img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; "
         "worker-src 'self' blob:; manifest-src 'self'"
     ),
-    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    # The packaged renderer is served from this same trusted loopback origin.
+    # Keep every other device capability disabled while allowing its explicit
+    # microphone permission flow to reach Speech Recognition.
+    "Permissions-Policy": "camera=(), microphone=(self), geolocation=(), payment=(), usb=()",
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",

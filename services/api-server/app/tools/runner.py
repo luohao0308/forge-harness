@@ -1055,7 +1055,10 @@ class ToolRunner:
         tool_call_id: str,
         output: dict,
     ) -> None:
-        if metadata.idempotent or output.get("error"):
+        nested_result = output.get("result")
+        if metadata.idempotent or output.get("error") or (
+            isinstance(nested_result, dict) and nested_result.get("error")
+        ):
             return
         key = str(input_json.get("idempotency_key") or "").strip()
         if not key:

@@ -7,7 +7,10 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
 
-SQLITE_BUSY_TIMEOUT_MS = 5_000
+# Team runtime and API requests can overlap while a model turn is being
+# persisted. Keep SQLite writers queued long enough for the active transaction
+# to commit instead of surfacing a transient "database is locked" error.
+SQLITE_BUSY_TIMEOUT_MS = 30_000
 SQLITE_WAL_AUTOCHECKPOINT_PAGES = 1_000
 SQLITE_JOURNAL_SIZE_LIMIT_BYTES = 64 * 1024 * 1024
 
@@ -28,7 +31,11 @@ def _configure_sqlite_connection(dbapi_connection: Any, database_url: str) -> No
 
 def create_database_engine(database_url: str) -> Engine:
     """Create an engine from an already-resolved URL without reading process settings."""
-    connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
+    connect_args = (
+        {"check_same_thread": False, "timeout": SQLITE_BUSY_TIMEOUT_MS / 1_000}
+        if database_url.startswith("sqlite")
+        else {}
+    )
     database_engine = create_engine(
         database_url,
         pool_pre_ping=True,

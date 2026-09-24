@@ -136,6 +136,7 @@ def test_static_renderer_serves_assets_and_history_without_swallowing_api(tmp_pa
         assert response.headers["x-frame-options"] == "DENY"
         assert response.headers["referrer-policy"] == "no-referrer"
         assert "camera=()" in response.headers["permissions-policy"]
+        assert "microphone=(self)" in response.headers["permissions-policy"]
     assert client.get("/api/missing").status_code == 404
     assert client.get("/health").status_code == 404
 
