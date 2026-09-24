@@ -106,7 +106,14 @@ export function shouldStartManagedLocalRuntime(): boolean {
 
 export function resolveLocalRuntimePaths(options: Pick<LocalRuntimeManagerOptions, 'userDataPath' | 'resourcesPath' | 'executablePath'> = {}): LocalRuntimePaths {
   const userDataPath = options.userDataPath || app.getPath('userData')
-  const resourcesPath = options.resourcesPath || process.resourcesPath || path.resolve(__dirname, '..', '..')
+  // Unpackaged (`electron .` from apps/desktop-app): process.resourcesPath points into
+  // node_modules/electron/dist, so default to the project's own resources/ tree and the
+  // renderer bundled next to the compiled main bundle instead of the missing bundle paths.
+  const useUnpackagedFallbacks = !app.isPackaged && !options.resourcesPath
+  const defaultResourcesPath = useUnpackagedFallbacks
+    ? path.resolve(__dirname, '..', '..', 'resources')
+    : process.resourcesPath || path.resolve(__dirname, '..', '..')
+  const resourcesPath = options.resourcesPath || defaultResourcesPath
   const executableName = process.platform === 'win32' ? 'harnessd.exe' : 'harnessd'
   const configuredExecutable = options.executablePath || process.env.HARNESSD_DEV_EXECUTABLE
   const runtimeRoot = configuredExecutable
@@ -117,7 +124,8 @@ export function resolveLocalRuntimePaths(options: Pick<LocalRuntimeManagerOption
     logDir: path.join(userDataPath, 'runtime', 'logs'),
     runtimeRoot,
     executablePath: configuredExecutable || resolveManifestExecutable(runtimeRoot, executableName),
-    staticDir: process.env.HARNESSD_STATIC_DIR || path.join(resourcesPath, 'renderer'),
+    staticDir: process.env.HARNESSD_STATIC_DIR
+      || (useUnpackagedFallbacks ? path.resolve(__dirname, '..', 'renderer') : path.join(resourcesPath, 'renderer')),
   }
 }
 
@@ -340,8 +348,11 @@ export class LocalRuntimeManager {
       redirect: 'error',
     })
     if (!response.ok) throw new Error(`Web extension bootstrap failed: ${response.status}`)
-    const body = await response.json() as { token?: unknown }
-    if (typeof body.token !== 'string' || !body.token) throw new Error('Web extension bootstrap returned no token')
+    const body = await response.json() as { token?: unknown; expires_at?: unknown }
+    if (typeof body.token !== 'string' || !body.token) throw new Error('Web extension bootstrap returned no one-time code')
+    if (typeof body.expires_at !== 'string' || !body.expires_at) throw new Error('Web extension bootstrap returned no expiry')
+    const expiresAt = Date.parse(body.expires_at)
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) throw new Error('Web extension bootstrap code is expired')
     const url = `${endpoint.rendererUrl}#bootstrap=${encodeURIComponent(body.token)}`
     await shell.openExternal(url)
   }
@@ -382,11 +393,14 @@ export class LocalRuntimeManager {
       windowsHide: true,
     })
     this.emitStartupDiagnostic('sidecar_spawned')
-    // The packaged runtime logs to stderr. Leaving this pipe unread eventually
-    // blocks every request on Python's logging lock once the OS buffer fills.
-    child.stderr.resume()
+    // The runtime logs to stderr. Leaving this pipe unread eventually blocks every
+    // request on Python's logging lock once the OS buffer fills, so keep draining it
+    // into a bounded tail that startup failures can surface.
+    const stderrTail = createStderrTail()
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', stderrTail.append)
     this.child = child
-    const endpointPromise = this.waitForReady(child)
+    const endpointPromise = this.waitForReady(child, stderrTail)
     child.stdin.end(`${JSON.stringify({
       protocol_version: 1,
       runtime_data_dir: this.paths.runtimeDataDir,
@@ -418,11 +432,14 @@ export class LocalRuntimeManager {
     }
   }
 
-  private waitForReady(child: ChildProcessWithoutNullStreams): Promise<LocalRuntimeEndpoint> {
+  private waitForReady(child: ChildProcessWithoutNullStreams, stderrTail: StderrTail): Promise<LocalRuntimeEndpoint> {
     return new Promise((resolve, reject) => {
       let stdoutBuffer = ''
       let readySeen = false
-      const timeout = setTimeout(() => finish(new Error('harnessd ready handshake timed out')), this.options.startupTimeoutMs)
+      const timeout = setTimeout(
+        () => finish(new Error(`harnessd ready handshake timed out: ${stderrTail.excerpt() || 'no stderr output'}`)),
+        this.options.startupTimeoutMs,
+      )
       const finish = (error?: Error, endpoint?: LocalRuntimeEndpoint) => {
         clearTimeout(timeout)
         child.stdout.off('data', onData)
@@ -434,7 +451,8 @@ export class LocalRuntimeManager {
       }
       const onError = (error: Error) => finish(error)
       const onEarlyExit = (code: number | null, signal: NodeJS.Signals | null) => {
-        finish(new Error(`harnessd exited before ready (${code ?? signal ?? 'unknown'})`))
+        const detail = stderrTail.excerpt()
+        finish(new Error(`harnessd exited before ready (${code ?? signal ?? 'unknown'})${detail ? `: ${detail}` : ''}`))
       }
       const onData = (chunk: Buffer | string) => {
         stdoutBuffer += chunk.toString()
@@ -811,6 +829,26 @@ function hashFile(filePath: string): string {
 function minimalRuntimeEnvironment(): NodeJS.ProcessEnv {
   const allowed = ['PATH', 'SystemRoot', 'WINDIR', 'TMP', 'TEMP', 'TMPDIR', 'LANG', 'LC_ALL']
   return Object.fromEntries(allowed.flatMap((key) => process.env[key] ? [[key, process.env[key]]] : []))
+}
+
+const STDERR_TAIL_MAX_LENGTH = 8_000
+const STDERR_TAIL_EXCERPT_LENGTH = 2_000
+
+type StderrTail = { append: (chunk: string) => void; excerpt: () => string }
+
+function createStderrTail(): StderrTail {
+  let buffer = ''
+  return {
+    append(chunk: string) {
+      buffer = chunk.length >= STDERR_TAIL_MAX_LENGTH
+        ? chunk.slice(-STDERR_TAIL_MAX_LENGTH)
+        : (buffer + chunk).slice(-STDERR_TAIL_MAX_LENGTH)
+    },
+    excerpt() {
+      const text = buffer.trim()
+      return text.length <= STDERR_TAIL_EXCERPT_LENGTH ? text : `…${text.slice(-STDERR_TAIL_EXCERPT_LENGTH)}`
+    },
+  }
 }
 
 function requireString(value: Record<string, unknown>, key: string): string {

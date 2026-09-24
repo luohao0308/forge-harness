@@ -90,7 +90,7 @@ describe('managed local harnessd runtime', () => {
         models: ['deepseek-v4-flash', 'deepseek-v4-pro'],
         latency_ms: 27,
       }))
-      .mockResolvedValueOnce(jsonResponse(200, { token: 'one time/token' }))
+      .mockResolvedValueOnce(jsonResponse(200, { token: 'one time/token', expires_at: new Date(Date.now() + 60_000).toISOString() }))
     const bootstrap = {
       session_signing_secret: 'session-secret-value',
       vault_encryption_secret: 'vault-secret-value',
@@ -497,6 +497,71 @@ describe('managed local harnessd runtime', () => {
     fs.rmSync(path.join(runtimeRoot, 'unexpected.bin'))
     fs.rmSync(libraryPath)
     await expect(manager.start()).rejects.toThrow('file is missing')
+  })
+
+  test('unpackaged runtime resolution falls back to the project resources tree and bundled renderer', async () => {
+    const previousStaticDir = process.env.HARNESSD_STATIC_DIR
+    const previousDevExecutable = process.env.HARNESSD_DEV_EXECUTABLE
+    delete process.env.HARNESSD_STATIC_DIR
+    delete process.env.HARNESSD_DEV_EXECUTABLE
+    vi.doMock('electron', () => ({
+      app: {
+        getPath: vi.fn(() => root),
+        isPackaged: false,
+      },
+      shell: { openExternal },
+    }))
+    let resolveLocalRuntimePaths: typeof import('../local-runtime')['resolveLocalRuntimePaths']
+    try {
+      const moduleDirectory = path.resolve(__dirname, '..')
+      ;({ resolveLocalRuntimePaths } = await import('../local-runtime'))
+      const paths = resolveLocalRuntimePaths({ userDataPath: root })
+      expect(paths.runtimeRoot).toBe(path.join(
+        path.resolve(moduleDirectory, '..', '..', 'resources'),
+        'runtime',
+        process.platform,
+        process.arch,
+      ))
+      expect(paths.staticDir).toBe(path.resolve(moduleDirectory, '..', 'renderer'))
+      expect(paths.executablePath.startsWith(`${paths.runtimeRoot}${path.sep}`)).toBe(true)
+      expect(paths.runtimeDataDir).toBe(path.join(root, 'runtime'))
+    } finally {
+      if (previousStaticDir !== undefined) process.env.HARNESSD_STATIC_DIR = previousStaticDir
+      if (previousDevExecutable !== undefined) process.env.HARNESSD_DEV_EXECUTABLE = previousDevExecutable
+    }
+
+    const withExplicitResources = resolveLocalRuntimePaths({ userDataPath: root, resourcesPath: path.join(root, 'resources') })
+    expect(withExplicitResources.runtimeRoot).toBe(path.join(root, 'resources', 'runtime', process.platform, process.arch))
+    expect(withExplicitResources.staticDir).toBe(path.join(root, 'resources', 'renderer'))
+  })
+
+  test('surfaces the harnessd stderr tail when the sidecar exits before ready', async () => {
+    const child = fakeChild()
+    const spawnRuntime = vi.fn(() => child)
+    const { LocalRuntimeManager } = await import('../local-runtime')
+    const manager = new LocalRuntimeManager({
+      userDataPath: root,
+      resourcesPath: root,
+      executablePath,
+      spawnRuntime: spawnRuntime as never,
+      fetchRuntime: vi.fn(),
+      createSecrets: () => ({
+        session_signing_secret: 'session',
+        vault_encryption_secret: 'vault',
+        desktop_bootstrap_token: 'desktop',
+        persistent_secret_storage: true,
+      }),
+      skipRuntimeVerification: true,
+      maxRestarts: 0,
+    })
+
+    const started = manager.start()
+    child.stderr.write('{"message":"renderer index is missing: /nope/renderer"}\n')
+    child.exitCode = 1
+    child.emit('exit', 1, null)
+
+    await expect(started).rejects.toThrow('harnessd exited before ready (1)')
+    await expect(started).rejects.toThrow('renderer index is missing: /nope/renderer')
   })
 
   test('rejects traversal and symlinks in schema v2 runtime manifests', async () => {
