@@ -148,6 +148,7 @@ jobs:
         working-directory: apps/desktop-app
         run: |
           npm run test -- src/__tests__/desktop-updates.test.ts src/__tests__/crash-reporting.test.ts src/__tests__/main.test.ts src/services/__tests__/desktop-telemetry.test.ts src/services/__tests__/startup-performance.test.ts src/services/__tests__/local-runtime.test.ts src/services/__tests__/local-runtime-native.integration.test.ts
+          npm run test:electron
           npm run test:startup-budget
       - name: Install Linux desktop packaging dependencies
         if: matrix.platform == 'linux'

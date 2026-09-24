@@ -41,10 +41,15 @@ _状态：active | 更新：2026-08-10_
 - 分支命名：日常使用短生命周期 `feat/*`、`fix/*`、`docs/*`、`chore/*`；Agent 临时 worktree 可以使用 `codex/` 前缀，但交付 PR 仍按产品范围命名。
 - 提交格式：遵循 [CONTRIBUTING.md](../../CONTRIBUTING.md) 的 Conventional Commit policy，commit 与 PR title 共用同一规则。
 - 集成策略：按仓库维护者要求使用 PR/受控合并；不执行强制 reset/checkout。
+- Git 交付策略：以 `.dev-workflow/manifest.json` 的 `gitPolicy` 为当前机器执行权限权威；默认 PR、required CI 和独立 Review 均为强制门禁。
+- 本地流程文件：以 `info/exclude` 的实际 `git check-ignore` 结果为准；已跟踪路径不会被本地 exclude 隐藏。
 - 自动允许：本地可逆的读、编辑、测试、构建和文档审计。
-- 需要确认：push/merge、生产发布、真实第三方凭据、签名/公证和不可逆迁移。
+- 需要确认：`mode=manual` 的 push、PR 创建/更新和远端 PR merge；持久权限策略修改固定需要人工确认。
+- 高权限操作：`privilegedOperationsDefault=deny`；发布、部署、迁移、回滚、流量、仓库设置、凭据和删除按明确目标另行授权。
 
 若 Worktree 模式为 `required` 或 `recommended`，按 [GIT-WORKTREE-WORKFLOW.md](GIT-WORKTREE-WORKFLOW.md) 执行。
+
+AI 执行远端操作前必须运行 `python3 scripts/delivery_guard.py check ...`。即使 actor 为 `ai`，也必须提供绑定仓库、remote/ref、准确 SHA、有效期和使用次数的一次性授权，以及五分钟内的托管平台证据；最终检查使用 `--consume`。
 
 ## 本地服务登记
 
@@ -74,3 +79,4 @@ _状态：active | 更新：2026-08-10_
 - 运行时变更完成任务自有服务重启和冒烟。
 - 契约、迁移、架构、任务和长期知识已按影响同步。
 - 交付摘要包含文件、命令、结果、风险和后续动作。
+- 交付状态只记录实际到达的 `committed → pushed → pr_open → ci_passed → review_approved → merged` 阶段，并绑定准确 SHA、PR head/base、CI 和独立 Review 证据。

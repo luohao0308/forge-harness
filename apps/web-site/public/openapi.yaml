@@ -406,12 +406,32 @@ components:
           - type: 'null'
           description: 已生成的片段
           title: Partial Assistant Content
+        permission_mode:
+          default: confirm
+          description: 本次请求的权限意图；服务端策略仍可收紧云端执行权限
+          enum:
+          - confirm
+          - auto-edit
+          - full-auto
+          title: Permission Mode
+          type: string
         pinned_node_ids:
           description: 强制注入上下文节点
           items:
             type: string
           title: Pinned Node Ids
           type: array
+        reasoning_effort:
+          default: high
+          description: 本次请求的规范化推理强度；仅在 provider 声明支持时转发
+          enum:
+          - light
+          - medium
+          - high
+          - xhigh
+          - max
+          title: Reasoning Effort
+          type: string
         run_id:
           anyOf:
           - type: string
@@ -4818,6 +4838,87 @@ components:
       - received_at
       title: DesktopFeedbackResponse
       type: object
+    DesktopGitWorktreeAuditRequest:
+      properties:
+        action:
+          enum:
+          - create
+          - switch
+          - remove
+          - prune
+          title: Action
+          type: string
+        error_code:
+          anyOf:
+          - maxLength: 256
+            type: string
+          - type: 'null'
+          title: Error Code
+        operation_id:
+          maxLength: 128
+          minLength: 1
+          title: Operation Id
+          type: string
+        path:
+          maxLength: 512
+          minLength: 1
+          title: Path
+          type: string
+        phase:
+          enum:
+          - requested
+          - completed
+          - failed
+          title: Phase
+          type: string
+        preview_sha256:
+          pattern: ^[0-9a-f]{64}$
+          title: Preview Sha256
+          type: string
+        target_path:
+          anyOf:
+          - maxLength: 512
+            type: string
+          - type: 'null'
+          title: Target Path
+      required:
+      - operation_id
+      - phase
+      - action
+      - path
+      - preview_sha256
+      title: DesktopGitWorktreeAuditRequest
+      type: object
+    DesktopGitWorktreeAuditResponse:
+      properties:
+        accepted:
+          title: Accepted
+          type: boolean
+        audit_id:
+          title: Audit Id
+          type: string
+        event_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Event Id
+        operation_id:
+          title: Operation Id
+          type: string
+        phase:
+          enum:
+          - requested
+          - completed
+          - failed
+          title: Phase
+          type: string
+      required:
+      - accepted
+      - audit_id
+      - operation_id
+      - phase
+      title: DesktopGitWorktreeAuditResponse
+      type: object
     DesktopMetricSampleRequest:
       description: Single desktop metric sample.
       properties:
@@ -7886,12 +7987,32 @@ components:
           - type: 'null'
           description: 本次请求选择的模型供应商
           title: Model Provider
+        permission_mode:
+          default: confirm
+          description: 本地 Agent 权限模式
+          enum:
+          - confirm
+          - auto-edit
+          - full-auto
+          title: Permission Mode
+          type: string
         pinned_node_ids:
           description: 强制注入上下文节点
           items:
             type: string
           title: Pinned Node Ids
           type: array
+        reasoning_effort:
+          default: high
+          description: 本次请求的规范化推理强度；由本地 Agent 能力决定是否使用
+          enum:
+          - light
+          - medium
+          - high
+          - xhigh
+          - max
+          title: Reasoning Effort
+          type: string
         resume_of_client_message_id:
           anyOf:
           - maxLength: 160
@@ -15909,6 +16030,24 @@ components:
           - goal
           title: Mode
           type: string
+        permission_mode:
+          default: confirm
+          enum:
+          - confirm
+          - auto-edit
+          - full-auto
+          title: Permission Mode
+          type: string
+        reasoning_effort:
+          default: high
+          enum:
+          - light
+          - medium
+          - high
+          - xhigh
+          - max
+          title: Reasoning Effort
+          type: string
         summary:
           anyOf:
           - type: string
@@ -16175,6 +16314,13 @@ components:
             type: string
           - type: 'null'
           title: Status
+        subject:
+          anyOf:
+          - maxLength: 240
+            minLength: 1
+            type: string
+          - type: 'null'
+          title: Subject
       title: TeamTaskUpdateRequest
       type: object
     TeamToolCallRequest:
@@ -21751,6 +21897,35 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
           description: Validation Error
       summary: Submit Desktop Feedback
+      tags:
+      - desktop-sync
+  /api/desktop/git-worktree/audit:
+    post:
+      description: Persist an organization-scoped audit record for a safe local Worktree
+        lifecycle operation.
+      operationId: record_desktop_git_worktree_audit_api_desktop_git_worktree_audit_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesktopGitWorktreeAuditRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopGitWorktreeAuditResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - HTTPBearer: []
+      summary: Record Desktop Git Worktree Audit
       tags:
       - desktop-sync
   /api/desktop/metrics:

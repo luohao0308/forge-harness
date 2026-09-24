@@ -715,6 +715,12 @@ Generated from FastAPI OpenAPI metadata.
 - Summary: Submit Desktop Feedback
 - Responses: 200, 422
 
+### `POST /api/desktop/git-worktree/audit`
+
+- Tags: desktop-sync
+- Summary: Record Desktop Git Worktree Audit
+- Responses: 200, 422
+
 ### `POST /api/desktop/metrics`
 
 - Tags: desktop-sync
