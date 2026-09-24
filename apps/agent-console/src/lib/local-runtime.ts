@@ -27,8 +27,8 @@ export async function initializeLocalRuntimeSession(fetchImpl: typeof fetch = fe
   if (!isLocalRuntimeProfile() || typeof window === "undefined") return;
 
   const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-  const bootstrapToken = fragment.get(WEB_BOOTSTRAP_FRAGMENT_KEY)?.trim();
-  if (!bootstrapToken) return;
+  const bootstrapCode = fragment.get(WEB_BOOTSTRAP_FRAGMENT_KEY)?.trim();
+  if (!bootstrapCode) return;
 
   fragment.delete(WEB_BOOTSTRAP_FRAGMENT_KEY);
   const remainingFragment = fragment.toString();
@@ -42,7 +42,7 @@ export async function initializeLocalRuntimeSession(fetchImpl: typeof fetch = fe
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: bootstrapToken }),
+    body: JSON.stringify({ token: bootstrapCode }),
   });
   if (!response.ok) {
     throw new Error(`Web Extension bootstrap failed (${response.status})`);

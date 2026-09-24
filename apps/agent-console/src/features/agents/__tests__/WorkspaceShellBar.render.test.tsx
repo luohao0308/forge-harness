@@ -100,7 +100,10 @@ function agentDefinition(overrides: Partial<AgentDefinition> = {}): AgentDefinit
   };
 }
 
-function renderShell(overrides: Partial<Parameters<typeof WorkspaceShellBar>[0]> = {}) {
+function renderShell(
+  overrides: Partial<Parameters<typeof WorkspaceShellBar>[0]> = {},
+  initialEntry = "/agents/default/workspace",
+) {
   const props: Parameters<typeof WorkspaceShellBar>[0] = {
     workspaceId: "default",
     workspaceOptions: [
@@ -124,7 +127,7 @@ function renderShell(overrides: Partial<Parameters<typeof WorkspaceShellBar>[0]>
   };
 
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <WorkspaceShellBar {...props} />
     </MemoryRouter>,
   );
@@ -194,6 +197,47 @@ describe("WorkspaceShellBar", () => {
     expect(
       screen.getByRole("button", { name: "工具/MCP（模型上下文协议）: 2 个可用" }),
     ).toHaveClass("w-8");
+  });
+
+  it("moves workspace utilities into a dedicated desktop toolbar menu", () => {
+    window.desktopApi = {};
+    renderShell({}, "/agents/support-agent/workspace?conversation_id=conv-42");
+
+    fireEvent.click(screen.getByRole("button", { name: "工作台工具" }));
+
+    const encodedReturnTo = "%2Fagents%2Fsupport-agent%2Fworkspace%3Fconversation_id%3Dconv-42";
+    expect(screen.getByRole("menuitem", { name: "团队" })).toHaveAttribute(
+      "href",
+      `/teams?return_to=${encodedReturnTo}`,
+    );
+    expect(screen.getByRole("menuitem", { name: "终端" })).toHaveAttribute(
+      "href",
+      `/terminal?return_to=${encodedReturnTo}`,
+    );
+    expect(screen.getByRole("menuitem", { name: "文件" })).toHaveAttribute(
+      "href",
+      "/agents/support-agent/workspace?conversation_id=conv-42&desktop_panel=files",
+    );
+    expect(screen.getByRole("menuitem", { name: "审批" })).toHaveAttribute(
+      "href",
+      "/agents/support-agent/workspace?conversation_id=conv-42&desktop_panel=approvals",
+    );
+    expect(screen.getByRole("menuitem", { name: "变更" })).toHaveAttribute(
+      "href",
+      `/changes?return_to=${encodedReturnTo}`,
+    );
+    expect(screen.getByRole("menuitem", { name: "待处理" })).toHaveAttribute(
+      "href",
+      `/attention?return_to=${encodedReturnTo}`,
+    );
+    expect(screen.getByRole("menuitem", { name: "运行历史" })).toHaveAttribute(
+      "href",
+      `/runs?return_to=${encodedReturnTo}`,
+    );
+    expect(screen.getByRole("menuitem", { name: "自动化" })).toHaveAttribute(
+      "href",
+      `/agents?desktop_panel=triggers&return_to=${encodedReturnTo}`,
+    );
   });
 
   it("opens an active run in a separate window only in desktop runtime", () => {

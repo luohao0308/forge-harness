@@ -149,26 +149,19 @@ describe("ConsoleShell", () => {
   });
 
   it.each([
-    ["/teams/team-1", "团队"],
-    ["/runs/run-1", "待处理"],
-    ["/attention", "待处理"],
-    ["/changes", "变更"],
-    ["/terminal", "终端"],
-    ["/desktop", "设置"],
-  ])("uses the compact desktop operation shell for %s", (path, activeLabel) => {
+    "/teams/team-1",
+    "/runs/run-1",
+    "/attention",
+    "/changes",
+    "/terminal",
+    "/desktop",
+  ])("uses the shared chrome-free desktop surface shell for %s", (path) => {
     window.desktopApi = {};
 
     renderShell(path, "桌面操作", "操作内容");
 
-    expect(screen.getByTestId("desktop-operation-shell")).toBeInTheDocument();
-    expect(screen.getByTestId("desktop-operation-rail")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: activeLabel })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "文件" })).toHaveAttribute(
-      "href",
-      "/agents/default/workspace?desktop_panel=files",
-    );
-    expect(screen.getByRole("link", { name: "待处理" })).toHaveAttribute("href", "/attention");
-    expect(screen.getByRole("link", { name: "变更" })).toHaveAttribute("href", "/changes");
+    expect(screen.getByTestId("desktop-surface-shell")).toBeInTheDocument();
+    expect(screen.queryByTestId("desktop-operation-rail")).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "控制台导航" })).not.toBeInTheDocument();
     expect(screen.queryByText("控制台")).not.toBeInTheDocument();
   });
@@ -177,7 +170,7 @@ describe("ConsoleShell", () => {
     renderShell("/teams/team-1", "团队", "团队内容");
 
     expect(screen.getByRole("navigation", { name: "控制台导航" })).toBeInTheDocument();
-    expect(screen.queryByTestId("desktop-operation-shell")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("desktop-surface-shell")).not.toBeInTheDocument();
   });
 
   it("shows the knowledge base navigation item", () => {

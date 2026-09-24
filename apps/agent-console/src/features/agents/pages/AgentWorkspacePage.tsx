@@ -20,7 +20,10 @@ import { useLocation, useNavigate, useParams, useSearchParams } from "react-rout
 
 import { ConsoleShell } from "../../../app/ConsoleShell";
 import { useConfirmDialog } from "../../../components/ui/confirm-dialog";
+import { ConfigDialog } from "../../../components/ui/config-dialog";
 import { notifyFeedback } from "../../../components/ui/feedback-toast";
+import { Button } from "../../../components/ui/button";
+import { Input } from "../../../components/ui/input";
 import { useI18n } from "../../../lib/i18n";
 import { createReconnectingSseClient, type SseClient } from "../../../lib/sse-client";
 import { cn } from "../../../lib/utils";
@@ -79,8 +82,12 @@ import {
   legacyMigration,
   readConversationsSnapshot,
   readHistoryPanelCollapsed,
+  readPinnedConversationIds,
   saveConversationsSnapshot,
+  savePinnedConversationIds,
+  CONVERSATION_TITLE_MAX_LENGTH,
   CONVERSATIONS_SCHEMA_VERSION,
+  normalizeConversationTitle,
   type ConversationSummary,
 } from "../lib/conversationHistory";
 import { clearSnapshot, loadSnapshot } from "../lib/localPersistence";
@@ -146,6 +153,7 @@ export function AgentWorkspacePage() {
   const [modelPickerOpenSeq, setModelPickerOpenSeq] = useState(0);
   const [historyOverlayOpen, setHistoryOverlayOpen] = useState(false);
   const [historyNarrow, setHistoryNarrow] = useState(false);
+  const [pinnedConversationIds, setPinnedConversationIds] = useState<string[]>([]);
   const [jumpTarget, setJumpTarget] = useState<{ nodeId: string; seq: number } | null>(null);
   const [localAgentEnabled, setLocalAgentEnabled] = useState(false);
   const [selectedLocalConnectionId, setSelectedLocalConnectionId] = useState<string | null>(null);
@@ -308,6 +316,8 @@ export function AgentWorkspacePage() {
         workspace_mode: context.mode,
         model_provider: context.model_provider,
         model_name: context.model_name,
+        reasoning_effort: context.reasoning_effort,
+        permission_mode: context.permission_mode,
         messages: context.messages,
         active_leaf_id: context.active_leaf_id,
         active_branch_id: context.active_branch_id,
@@ -486,6 +496,7 @@ export function AgentWorkspacePage() {
   const newConversation = useWorkspaceStore((s) => s.newConversation);
   const setCurrentConversation = useWorkspaceStore((s) => s.setCurrentConversation);
   const deleteConversation = useWorkspaceStore((s) => s.deleteConversation);
+  const renameConversation = useWorkspaceStore((s) => s.renameConversation);
   const setHistoryPanelCollapsed = useWorkspaceStore((s) => s.setHistoryPanelCollapsed);
   const hydrateFromConversations = useWorkspaceStore((s) => s.hydrateFromConversations);
   const upsertConversationSummary = useWorkspaceStore((s) => s.upsertConversationSummary);
@@ -504,6 +515,72 @@ export function AgentWorkspacePage() {
     selectedLocalConnection?.id,
     selectedLocalConnectionId,
   ]);
+  const currentConversationTitle = useMemo(
+    () =>
+      conversations.find((conversation) => conversation.id === currentConversationId)?.title ??
+      text("新对话", "New conversation"),
+    [conversations, currentConversationId, text],
+  );
+  const [renameConversationId, setRenameConversationId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const renameTarget = renameConversationId
+    ? conversations.find((conversation) => conversation.id === renameConversationId) ?? null
+    : null;
+  const openRenameConversation = useCallback(
+    (conversationId: string) => {
+      const target = useWorkspaceStore
+        .getState()
+        .conversations.find((conversation) => conversation.id === conversationId);
+      if (!target) return;
+      setRenameConversationId(conversationId);
+      setRenameDraft(target.title);
+      setRenameError(null);
+    },
+    [],
+  );
+  const closeRenameConversation = useCallback(() => {
+    setRenameConversationId(null);
+    setRenameDraft("");
+    setRenameError(null);
+  }, []);
+  const submitRenameConversation = useCallback(() => {
+    if (renameConversationId === null) return;
+    const normalized = normalizeConversationTitle(renameDraft);
+    if (normalized === null) {
+      setRenameError(
+        renameDraft.trim().length === 0
+          ? text("请输入对话名称。", "Enter a conversation name.")
+          : text(
+              `名称不能超过 ${CONVERSATION_TITLE_MAX_LENGTH} 个字符。`,
+              `Use ${CONVERSATION_TITLE_MAX_LENGTH} characters or fewer.`,
+            ),
+      );
+      return;
+    }
+    renameConversation(renameConversationId, normalized);
+    closeRenameConversation();
+    notifyFeedback({
+      tone: "success",
+      title: text("对话已重命名", "Conversation renamed"),
+      description: normalized,
+    });
+  }, [closeRenameConversation, renameConversation, renameConversationId, renameDraft, text]);
+  useEffect(() => {
+    setPinnedConversationIds(readPinnedConversationIds(agentId));
+  }, [agentId]);
+  const handleTogglePinnedConversation = useCallback(
+    (conversationId: string) => {
+      setPinnedConversationIds((current) => {
+        const next = current.includes(conversationId)
+          ? current.filter((id) => id !== conversationId)
+          : [conversationId, ...current];
+        savePinnedConversationIds(agentId, next);
+        return next;
+      });
+    },
+    [agentId],
+  );
   const runReturnTarget = useMemo(
     () => ({
       agentId,
@@ -2346,6 +2423,12 @@ export function AgentWorkspacePage() {
       });
       if (!confirmed) return;
       deleteConversation(id);
+      setPinnedConversationIds((current) => {
+        if (!current.includes(id)) return current;
+        const next = current.filter((conversationId) => conversationId !== id);
+        savePinnedConversationIds(agentId, next);
+        return next;
+      });
       navigateToConversation(useWorkspaceStore.getState().currentConversationId);
       notifyFeedback({
         tone: "warning",
@@ -2353,7 +2436,7 @@ export function AgentWorkspacePage() {
         description: title ? `已删除“${title}”。` : "已删除当前对话。",
       });
     },
-    [confirm, deleteConversation, navigateToConversation],
+    [agentId, confirm, deleteConversation, navigateToConversation],
   );
 
   const handleToggleHistoryCollapsed = useCallback(() => {
@@ -2370,7 +2453,7 @@ export function AgentWorkspacePage() {
 
   return (
     <ConsoleShell title={text("智能体工作台", "Agent Workspace")}>
-      <div className="relative flex h-full min-h-0 w-full min-w-0 overflow-hidden bg-white">
+      <div className="relative flex h-full min-h-0 w-full min-w-0 overflow-hidden bg-ui-page">
         <ConversationHistoryPanel
           collapsed={historyCollapsed}
           conversations={visibleConversations}
@@ -2379,11 +2462,17 @@ export function AgentWorkspacePage() {
           onNewConversation={handleNewConversation}
           onSelectConversation={handleSelectConversation}
           onDeleteConversation={handleDeleteConversation}
+          onRenameConversation={openRenameConversation}
           onToggleCollapsed={handleToggleHistoryCollapsed}
+          onOpenSearch={handleOpenSearch}
+          pinnedConversationIds={pinnedConversationIds}
+          onTogglePinnedConversation={handleTogglePinnedConversation}
         />
         <ChatSurface
           agentId={agentId}
           agentName={agent.data?.name ?? agentId}
+          conversationTitle={currentConversationTitle}
+          onRenameConversation={() => openRenameConversation(currentConversationId)}
           workspaceId={currentWorkspaceId}
           workspaceOptions={workspaceOptions}
           modelLabel={selectedModelLabel}
@@ -2481,6 +2570,59 @@ export function AgentWorkspacePage() {
         onJumpToNode={handleJumpToNode}
       />
       <ShortcutOverlay open={shortcutOpen} onClose={() => setShortcutOpen(false)} />
+      {renameTarget ? (
+        <ConfigDialog
+          open
+          title={text("重命名对话", "Rename conversation")}
+          description={text(
+            "为当前工作区中的对话设置一个容易识别的名称。",
+            "Give this workspace conversation a name you can recognize.",
+          )}
+          onClose={closeRenameConversation}
+          className="max-w-md"
+        >
+          <form
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitRenameConversation();
+            }}
+          >
+            <label className="grid gap-1.5 text-xs">
+              <span className="font-medium text-ui-muted">
+                {text("对话名称", "Conversation name")}
+              </span>
+              <Input
+                autoFocus
+                value={renameDraft}
+                maxLength={CONVERSATION_TITLE_MAX_LENGTH}
+                aria-label={text("对话名称", "Conversation name")}
+                aria-invalid={renameError !== null}
+                onChange={(event) => {
+                  setRenameDraft(event.target.value);
+                  if (renameError !== null) setRenameError(null);
+                }}
+              />
+              <span className="text-[11px] text-ui-faint">
+                {renameDraft.trim().length}/{CONVERSATION_TITLE_MAX_LENGTH}
+              </span>
+              {renameError ? (
+                <span role="alert" className="text-xs text-red-600">
+                  {renameError}
+                </span>
+              ) : null}
+            </label>
+            <div className="flex items-center justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={closeRenameConversation}>
+                {text("取消", "Cancel")}
+              </Button>
+              <Button type="submit" variant="primary">
+                {text("保存名称", "Save name")}
+              </Button>
+            </div>
+          </form>
+        </ConfigDialog>
+      ) : null}
       {confirmDialog}
     </ConsoleShell>
   );
@@ -2510,6 +2652,7 @@ function deriveModelOptions(settings: ModelSettings | undefined): ModelOption[] 
       providerLabel,
       modelId,
       modelLabel: modelId,
+      supportsReasoningEffort: record.supports_reasoning_effort === true,
     });
   }
   return out;
@@ -2781,6 +2924,7 @@ function localAgentConversationFromMessages({
   pinnedNodeIds = [],
   contextWindowTurns = 8,
   contextCompressions = {},
+  titleIsCustom = false,
   pendingUserNode,
   pendingNode,
 }: {
@@ -2793,6 +2937,7 @@ function localAgentConversationFromMessages({
   pinnedNodeIds?: string[];
   contextWindowTurns?: number;
   contextCompressions?: ConversationSummary["contextCompressions"];
+  titleIsCustom?: boolean;
   pendingUserNode?: ConversationNode;
   pendingNode?: ConversationNode;
 }): ConversationSummary {
@@ -3135,6 +3280,7 @@ function localAgentConversationFromMessages({
   return {
     id: conversationId,
     title,
+    ...(titleIsCustom ? { titleIsCustom: true } : {}),
     created_at: createdAt,
     updated_at: updatedAt,
     nodesById,
@@ -3156,7 +3302,7 @@ function localAgentHydrationStateForConversation(
   conversationId: string,
 ): Pick<
   ConversationSummary,
-  "pinnedNodeIds" | "contextWindowTurns" | "contextCompressions"
+  "pinnedNodeIds" | "contextWindowTurns" | "contextCompressions" | "titleIsCustom"
 > {
   const existing = store.conversations.find(
     (conversation) => conversation.id === conversationId,
@@ -3176,6 +3322,7 @@ function localAgentHydrationStateForConversation(
       contextCompressions,
       conversationId,
     ),
+    titleIsCustom: existing?.titleIsCustom,
   };
 }
 

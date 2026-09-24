@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { Bot, BrainCircuit, Check, Database, FlaskConical, Gauge, GitBranch, Pencil, Play, RotateCcw, Search, Shield, Wrench, X } from "lucide-react";
+import { Bot, BrainCircuit, Check, Database, FlaskConical, Gauge, GitBranch, History, Pencil, Play, RotateCcw, Search, Shield, Wrench, X } from "lucide-react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { ConsoleShell } from "../../../app/ConsoleShell";
+import { DesktopPageHeader } from "../../../components/desktop/DesktopPageHeader";
 import { Badge, statusTone } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardHeader } from "../../../components/ui/card";
@@ -13,6 +14,8 @@ import { Input, Textarea } from "../../../components/ui/input";
 import { MenuSelect } from "../../../components/ui/menu-select";
 import { Table, Td, Th } from "../../../components/ui/table";
 import { TermHint } from "../../../components/ui/term";
+import { isDesktopRuntime } from "../../../lib/desktop-bridge";
+import { desktopOperationPath } from "../../../lib/desktop-navigation";
 import { useI18n } from "../../../lib/i18n";
 import { eventLabel, executionModeLabel, riskLabel, statusLabel } from "../../../lib/labels";
 import { formatShortDate } from "../../../lib/utils";
@@ -57,6 +60,7 @@ type ModifyApprovalDialogState = {
 
 export function RunDetailPage({ focus }: { focus?: "events" | "subagents" }) {
   const { text } = useI18n();
+  const desktop = isDesktopRuntime();
   const { runId } = useParams();
   const [searchParams] = useSearchParams();
   const retrievalSessionId = searchParams.get("retrieval_session_id") ?? undefined;
@@ -411,29 +415,44 @@ export function RunDetailPage({ focus }: { focus?: "events" | "subagents" }) {
     runId,
     agentId: run?.agent_id ?? null,
   });
+  const runHistoryPath = desktop
+    ? desktopOperationPath("/runs", backToWorkspacePath)
+    : "/runs";
   const subagentMetric = run ? `${data?.subagents.length ?? 0}/${run.max_subagents}` : "0/0";
 
   return (
     <ConsoleShell title={text("智能体运行", "Agent Run")}>
-      <div className="grid grid-cols-12 gap-4 p-4">
-        <section className="col-span-8 space-y-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {desktop ? (
+          <DesktopPageHeader
+            title={run?.title ?? text("加载运行...", "Loading Run...")}
+            description={run?.goal || text("运行详情与执行证据", "Run details and execution evidence")}
+            icon={History}
+            returnTo={backToWorkspacePath}
+            actions={run ? <Badge tone={statusTone(run.status)}>{statusLabel(run.status)}</Badge> : undefined}
+          />
+        ) : null}
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-4 xl:grid-cols-12">
+          <section className="space-y-4 xl:col-span-8">
           <Card className="p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Link to="/runs" className="text-xs text-slate-500 hover:text-slate-900">
-                    {text("运行历史", "Run History")}
-                  </Link>
-                  <span className="text-slate-300">/</span>
-                  <span className="font-mono text-xs text-slate-500">{run?.id.slice(0, 8) ?? "..."}</span>
+            {!desktop ? (
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Link to={runHistoryPath} className="text-xs text-slate-500 hover:text-slate-900">
+                      {text("运行历史", "Run History")}
+                    </Link>
+                    <span className="text-slate-300">/</span>
+                    <span className="font-mono text-xs text-slate-500">{run?.id.slice(0, 8) ?? "..."}</span>
+                  </div>
+                  <h1 className="mt-2 text-xl font-semibold text-slate-950">{run?.title ?? text("加载运行...", "Loading Run...")}</h1>
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{run?.goal}</p>
                 </div>
-                <h1 className="mt-2 text-xl font-semibold text-slate-950">{run?.title ?? text("加载运行...", "Loading Run...")}</h1>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{run?.goal}</p>
+                {run && <Badge tone={statusTone(run.status)}>{statusLabel(run.status)}</Badge>}
               </div>
-              {run && <Badge tone={statusTone(run.status)}>{statusLabel(run.status)}</Badge>}
-            </div>
+            ) : null}
             {run && (
-              <div className="mt-4 grid grid-cols-4 gap-2 text-xs">
+              <div className={desktop ? "grid grid-cols-2 gap-2 text-xs sm:grid-cols-4" : "mt-4 grid grid-cols-4 gap-2 text-xs"}>
                 <Metric label={text("模型", "Model")} value={`${run.model_provider}/${run.model_name}`} />
                 <Metric label="子代理" value={subagentMetric} />
                 <Metric label="沙箱" value={run.enable_sandbox ? "开启" : "关闭"} />
@@ -511,12 +530,14 @@ export function RunDetailPage({ focus }: { focus?: "events" | "subagents" }) {
                   </Button>
                 </div>
               )}
-              <Link to={backToWorkspacePath}>
-                <Button>
-                  <Bot className="h-3.5 w-3.5" />
-                  {text("回到工作台", "Back to Workspace")}
-                </Button>
-              </Link>
+              {!desktop ? (
+                <Link to={backToWorkspacePath}>
+                  <Button>
+                    <Bot className="h-3.5 w-3.5" />
+                    {text("回到工作台", "Back to Workspace")}
+                  </Button>
+                </Link>
+              ) : null}
               {primaryTraceId ? (
                 <Link to={`/observability/trace?trace_id=${encodeURIComponent(primaryTraceId)}`}>
                   <Button>
@@ -889,7 +910,7 @@ export function RunDetailPage({ focus }: { focus?: "events" | "subagents" }) {
           </div>
         </section>
 
-        <aside className="col-span-4 space-y-4">
+        <aside className="space-y-4 xl:col-span-4">
           <ReplayPanel
             latestSequence={latestSequence}
             replaySequence={replaySequence}
@@ -1047,6 +1068,7 @@ export function RunDetailPage({ focus }: { focus?: "events" | "subagents" }) {
             </div>
           </Card>
         </aside>
+        </div>
       </div>
       <ModifyToolApprovalDialog
         state={modifyApprovalDialog}

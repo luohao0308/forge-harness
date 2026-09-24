@@ -18,6 +18,7 @@ const providers: ModelOption[] = [
     providerLabel: "DeepSeek Flash",
     modelId: "deepseek-v4-flash",
     modelLabel: "deepseek-v4-flash",
+    supportsReasoningEffort: true,
   },
   {
     providerId: "deepseek-pro",
@@ -593,6 +594,8 @@ describe("ChatSurface Workspace shell integration", () => {
         mode: "chat",
         model_provider: "deepseek-flash",
         model_name: "deepseek-v4-flash",
+        reasoning_effort: "high",
+        permission_mode: "confirm",
         messages: expect.any(Array),
         pinned_node_ids: expect.any(Array),
         tool_mentions: expect.any(Array),
@@ -659,6 +662,146 @@ describe("ChatSurface Workspace shell integration", () => {
     expect(screen.queryByText("github.search")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /@read_file/ }));
     expect(screen.getByPlaceholderText("直接与智能体对话")).toHaveValue("@read_file ");
+  });
+
+  it("persists reasoning effort from the five-step model slider", async () => {
+    const user = userEvent.setup();
+    renderSurface();
+
+    await user.click(screen.getByRole("button", { name: "deepseek-v4-flash" }));
+    const slider = screen.getByRole("slider", { name: "推理强度" });
+    expect(slider).toHaveAttribute("min", "0");
+    expect(slider).toHaveAttribute("max", "4");
+
+    fireEvent.change(slider, { target: { value: "3" } });
+
+    expect(useWorkspaceStore.getState().reasoningEffort).toBe("xhigh");
+  });
+
+  it("keeps the reasoning slider available when model discovery is unavailable", async () => {
+    const user = userEvent.setup();
+    renderSurface({ providers: [], selectedProviderId: null, selectedModelId: null });
+
+    await user.click(screen.getByRole("button", { name: "deepseek-v4-flash" }));
+
+    expect(screen.getByText(/模型设置不可用/)).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "推理强度" })).toBeInTheDocument();
+  });
+
+  it("persists permission mode and opens the existing approval inspector", async () => {
+    const user = userEvent.setup();
+    const props = renderSurface({ pendingApprovalCount: 3 });
+    const permissionButton = screen.getByRole("button", { name: "设置访问权限" });
+    expect(permissionButton).toHaveTextContent("3");
+
+    await user.click(permissionButton);
+    await user.click(screen.getByRole("button", { name: /完全自动/ }));
+
+    expect(useWorkspaceStore.getState().permissionMode).toBe("full-auto");
+    await user.click(screen.getByRole("button", { name: /打开审批详情/ }));
+    expect(props.onOpenInspector).toHaveBeenCalledWith("runtime");
+  });
+
+  it("shows a browser fallback when desktop workspace context is unavailable", () => {
+    renderSurface();
+
+    expect(screen.queryByTestId("composer-workspace-context")).not.toBeInTheDocument();
+  });
+
+  it("hides project context when no project or branch is connected", async () => {
+    window.desktopApi = {
+      file: {
+        getWorkspaceRoot: vi.fn(async () => ({ rootPath: null, watching: false })),
+        onChange: vi.fn(() => vi.fn()),
+      },
+      changeReview: {
+        getStatus: vi.fn(async () => ({
+          state: "ready" as const,
+          rootPath: null,
+          repositoryRoot: null,
+          branch: null,
+          upstream: null,
+          ahead: 0,
+          behind: 0,
+          files: [],
+          errorCode: null,
+          message: null,
+        })),
+      },
+    };
+
+    renderSurface();
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("composer-workspace-context")).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows the project folder and git branch status from desktop bridges", async () => {
+    useWorkspaceStore.getState().updateWorkspaceConfig("default", {
+      localFileRootPath: "/workspace/codex-project",
+    });
+    const getStatus = vi.fn(async () => ({
+      state: "ready" as const,
+      rootPath: "/workspace/codex-project",
+      repositoryRoot: "/workspace/codex-project",
+      branch: "codex/composer-controls",
+      upstream: "origin/codex/composer-controls",
+      ahead: 2,
+      behind: 1,
+      files: [],
+      errorCode: null,
+      message: null,
+    }));
+    window.desktopApi = {
+      file: {
+        getWorkspaceRoot: vi.fn(async () => ({
+          rootPath: "/workspace/codex-project",
+          watching: false,
+        })),
+        onChange: vi.fn(() => vi.fn()),
+      },
+      changeReview: { getStatus },
+    };
+
+    renderSurface();
+
+    expect(await screen.findByText("codex-project")).toHaveAttribute(
+      "title",
+      "/workspace/codex-project",
+    );
+    expect(await screen.findByText("codex/composer-controls")).toBeInTheDocument();
+    expect(screen.getByText("↑2 ↓1")).toBeInTheDocument();
+    expect(getStatus).toHaveBeenCalled();
+  });
+
+  it("shows an explicit Git degradation state instead of hiding bridge errors", async () => {
+    const getStatus = vi.fn(async () => ({
+      state: "git-unavailable" as const,
+      rootPath: "/workspace/codex-project",
+      repositoryRoot: null,
+      branch: null,
+      upstream: null,
+      ahead: 0,
+      behind: 0,
+      files: [],
+      errorCode: "git_missing",
+      message: "git executable unavailable",
+    }));
+    window.desktopApi = {
+      file: {
+        getWorkspaceRoot: vi.fn(async () => ({
+          rootPath: "/workspace/codex-project",
+          watching: false,
+        })),
+        onChange: vi.fn(() => vi.fn()),
+      },
+      changeReview: { getStatus },
+    };
+
+    renderSurface();
+
+    expect(await screen.findByText("Git 不可用")).toBeInTheDocument();
   });
 
   it("opens the native file picker from the compact tools panel", async () => {

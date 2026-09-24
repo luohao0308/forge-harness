@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Clock3, MessageSquare, Network, Plus, Users } from "lucide-react";
 
 import { ConsoleShell } from "../../../app/ConsoleShell";
+import { DesktopPageHeader } from "../../../components/desktop/DesktopPageHeader";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card } from "../../../components/ui/card";
@@ -18,7 +19,9 @@ import { TeamCreateModal } from "./TeamCreateModal";
 export function TeamListPage() {
   const { text } = useI18n();
   const navigate = useNavigate();
+  const location = useLocation();
   const [createOpen, setCreateOpen] = useState(false);
+  const desktopEnabled = isDesktopRuntime();
 
   const teamsQuery = useQuery({ queryKey: ["teams"], queryFn: listTeams });
   const teams = teamsQuery.data?.items ?? [];
@@ -26,34 +29,53 @@ export function TeamListPage() {
   const activeTeams = teams.filter((team) => team.status !== "ARCHIVED");
 
   useEffect(() => {
-    if (!isDesktopRuntime() || teamsQuery.isLoading || activeTeams.length === 0) return;
-    navigate(`/teams/${activeTeams[0].id}`, { replace: true });
-  }, [activeTeams, navigate, teamsQuery.isLoading]);
+    if (!desktopEnabled || teamsQuery.isLoading || activeTeams.length === 0) return;
+    navigate({ pathname: `/teams/${activeTeams[0].id}`, search: location.search }, { replace: true });
+  }, [activeTeams, desktopEnabled, location.search, navigate, teamsQuery.isLoading]);
 
   return (
     <ConsoleShell title={text("团队", "Teams")}>
-      <div className="flex h-[100vh] min-h-0 overflow-hidden bg-white">
-        <TeamRail teams={teams} onCreate={() => setCreateOpen(true)} />
+      <div className="flex h-[100vh] min-h-0 overflow-hidden bg-ui-page">
+        <TeamRail teams={teams} onCreate={() => setCreateOpen(true)} desktop={desktopEnabled} />
         <main className="flex min-w-0 flex-1 flex-col">
-          <TeamRailMobileStrip teams={teams} />
-          <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-[13px] font-semibold text-slate-950">
-                <Network className="h-4 w-4" />
-                <span>{text("团队模式", "Team Mode")}</span>
-                <Badge tone="neutral">{activeTeams.length}</Badge>
+          <TeamRailMobileStrip teams={teams} desktop={desktopEnabled} />
+          {desktopEnabled ? (
+            <DesktopPageHeader
+              title={text("团队模式", "Team Mode")}
+              description={text(`${activeTeams.length} 个团队`, `${activeTeams.length} teams`)}
+              icon={Network}
+              actions={(
+                <Button
+                  variant="ghost"
+                  aria-label={text("创建团队", "Create Team")}
+                  title={text("创建团队", "Create Team")}
+                  className="h-8 w-8 px-0"
+                  onClick={() => setCreateOpen(true)}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            />
+          ) : (
+            <div className="glass-surface flex h-12 shrink-0 items-center justify-between gap-3 border-b border-ui-border/70 px-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-[13px] font-semibold text-slate-950">
+                  <Network className="h-4 w-4" />
+                  <span>{text("团队模式", "Team Mode")}</span>
+                  <Badge tone="neutral">{activeTeams.length}</Badge>
+                </div>
+                <div className="mt-0.5 truncate text-[11px] text-slate-500">
+                  {text("选择左侧团队进入多列协作界面。", "Choose a team to open the multi-column collaboration surface.")}
+                </div>
               </div>
-              <div className="mt-0.5 truncate text-[11px] text-slate-500">
-                {text("选择左侧团队进入多列协作界面。", "Choose a team to open the multi-column collaboration surface.")}
-              </div>
+              <Button onClick={() => setCreateOpen(true)}>
+                <Plus className="h-3.5 w-3.5" />
+                {text("创建团队", "Create Team")}
+              </Button>
             </div>
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" />
-              {text("创建团队", "Create Team")}
-            </Button>
-          </div>
+          )}
 
-          <div className="min-h-0 flex-1 overflow-auto bg-slate-50/60 p-3 sm:p-4">
+          <div className="min-h-0 flex-1 overflow-auto bg-ui-page p-3 sm:p-4">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {activeTeams.map((team) => {
                 const messageCount = team.messages.length;
@@ -108,7 +130,7 @@ export function TeamListPage() {
           <TeamCreateModal
             open={createOpen}
             onClose={() => setCreateOpen(false)}
-            onCreated={(team) => navigate(`/teams/${team.id}`)}
+            onCreated={(team) => navigate({ pathname: `/teams/${team.id}`, search: location.search })}
           />
         </main>
       </div>

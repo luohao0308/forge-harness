@@ -31,6 +31,7 @@ import { getWorkspaceScopeId, legacyWorkspaceStorageKey, workspaceScopedStorageK
 import { getWorkspacePersistenceStorage } from "../../../lib/workspace-persistence-storage";
 
 export const CONVERSATIONS_SCHEMA_VERSION = 2 as const;
+export const CONVERSATION_TITLE_MAX_LENGTH = 80;
 
 const DEFAULT_TITLE_ZH = "新对话";
 const DEFAULT_TITLE_EN = "New conversation";
@@ -42,6 +43,8 @@ const ROOT_NODE_ID = "root";
 export type ConversationSummary = {
   id: string;
   title: string;
+  /** True when the user explicitly renamed the conversation. */
+  titleIsCustom?: boolean;
   created_at: string;
   updated_at: string;
   nodesById: Record<string, ConversationNode>;
@@ -53,6 +56,15 @@ export type ConversationSummary = {
   contextWindowTurns: number;
   contextCompressions: Record<string, ContextCompressionSummary>;
 };
+
+/** Normalize a user-entered title while rejecting blank or overlong values. */
+export function normalizeConversationTitle(value: string): string | null {
+  const normalized = value.trim();
+  if (normalized.length === 0 || normalized.length > CONVERSATION_TITLE_MAX_LENGTH) {
+    return null;
+  }
+  return normalized;
+}
 
 export type ConversationsSnapshot = {
   version: typeof CONVERSATIONS_SCHEMA_VERSION;
@@ -413,5 +425,36 @@ export function readHistoryPanelCollapsed(agentId: string): boolean | null {
     return legacy === "1";
   } catch {
     return null;
+  }
+}
+
+// Sidebar pins are presentation preferences, so keep them outside the
+// conversation snapshot and scope them to the active workspace/agent.
+function pinnedConversationIdsKey(agentId: string): string {
+  return workspaceScopedStorageKey(getWorkspaceScopeId(), "v3", agentId, "pinnedConversationIds");
+}
+
+export function savePinnedConversationIds(agentId: string, ids: string[]): void {
+  const storage = getWorkspacePersistenceStorage();
+  if (!storage) return;
+  try {
+    storage.setItem(pinnedConversationIdsKey(agentId), JSON.stringify([...new Set(ids)]));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readPinnedConversationIds(agentId: string): string[] {
+  const storage = getWorkspacePersistenceStorage();
+  if (!storage) return [];
+  try {
+    const raw = storage.getItem(pinnedConversationIdsKey(agentId));
+    if (raw === null) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === "string" && value.length > 0)
+      : [];
+  } catch {
+    return [];
   }
 }

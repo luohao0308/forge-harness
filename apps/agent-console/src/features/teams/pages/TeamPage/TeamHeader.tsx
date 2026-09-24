@@ -1,4 +1,4 @@
-import { ArrowLeft, ClipboardList, MoreHorizontal, Plus, UsersRound, Wrench } from "lucide-react";
+import { ArrowLeft, ClipboardList, MoreHorizontal, PanelRightClose, PanelRightOpen, Pencil, Plus, UsersRound } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useRef, useState } from "react";
 
@@ -51,8 +51,12 @@ export function TeamHeader({
   onPauseGoal,
   onResumeGoal,
   onEditGoal,
+  onRenameTeam,
+  onRenameTask,
   workspaceView,
   onWorkspaceViewChange,
+  overviewPanelOpen = false,
+  onToggleOverviewPanel,
 }: {
   activeTeam: Team;
   agents: TeamAgent[];
@@ -67,28 +71,31 @@ export function TeamHeader({
   onPauseGoal: () => void;
   onResumeGoal: () => void;
   onEditGoal: () => void;
+  onRenameTeam: () => void;
+  onRenameTask: (task: TeamTask) => void;
   workspaceView?: TeamWorkspaceView;
   onWorkspaceViewChange?: (view: TeamWorkspaceView) => void;
+  overviewPanelOpen?: boolean;
+  onToggleOverviewPanel?: () => void;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
+  const workspaceReturnTo = useDesktopWorkspaceReturnPath();
   useOutsideClick(moreMenuRef, () => setMoreOpen(false), moreOpen);
-  const compactGoal = Boolean(workspaceView && workspaceView !== "columns");
-  const goalOpenTaskCount = Number(activeTeam.active_goal?.progress_json.open_task_count ?? 0);
-  const goalCompletedTaskCount = Number(activeTeam.active_goal?.progress_json.completed_task_count ?? 0);
+  const desktopEnabled = workspaceView !== undefined;
   const workspaceModeLabel = activeTeam.workspace_mode === "shared"
     ? text("共享工作区", "Shared workspace")
     : text("独立工作区", "Isolated workspace");
 
   return (
-    <header className="relative z-30 shrink-0 border-b border-slate-200 bg-white/95 px-3 py-2 backdrop-blur sm:px-4">
+    <header className="glass-surface relative z-30 flex min-h-14 shrink-0 items-center border-b border-ui-border/70 px-3 py-2 sm:px-4">
       <div className="flex min-w-0 items-center gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <Link
-            to="/teams"
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
-            aria-label={text("返回团队列表", "Back to teams")}
-            title={text("返回团队列表", "Back to teams")}
+            to={desktopEnabled ? workspaceReturnTo : "/teams"}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ui-muted transition-colors hover:bg-ui-subtle hover:text-ui-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong"
+            aria-label={desktopEnabled ? text("返回工作区", "Back to workspace") : text("返回团队列表", "Back to teams")}
+            title={desktopEnabled ? text("返回工作区", "Back to workspace") : text("返回团队列表", "Back to teams")}
           >
             <ArrowLeft aria-hidden="true" className="h-4 w-4" />
           </Link>
@@ -114,51 +121,27 @@ export function TeamHeader({
           {workspaceView && onWorkspaceViewChange ? (
             <DesktopTeamViewSwitch value={workspaceView} text={text} onChange={onWorkspaceViewChange} />
           ) : null}
-          {activeTeam.active_goal ? (
-            <div className="hidden min-w-0 max-w-[14rem] items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-700 xl:flex">
+          {!desktopEnabled && activeTeam.active_goal ? (
+            <div className="glass-control hidden min-w-0 max-w-[18rem] items-center gap-1.5 rounded-xl border border-ui-border/70 px-2 py-1 text-[11px] text-ui-ink lg:flex">
               <Badge className="shrink-0 whitespace-nowrap" tone={goalTone(activeTeam.active_goal.status)}>
                 {goalStatusLabel(activeTeam.active_goal.status, text)}
               </Badge>
-              <span className="max-w-[14rem] truncate font-medium">
-                {activeTeam.active_goal.objective}
-              </span>
-              <Badge className="shrink-0 whitespace-nowrap" tone="info">
-                {goalCompletedTaskCount}/{goalCompletedTaskCount + goalOpenTaskCount}
-              </Badge>
-              {!compactGoal ? (
-                <>
-                  <span className="text-slate-500">
-                    {text("当前目标", "Current goal")}
-                  </span>
-                </>
-              ) : null}
+              <span className="truncate font-medium">{activeTeam.active_goal.objective}</span>
             </div>
           ) : null}
-          <span
-            className="hidden h-8 max-w-32 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-slate-700 2xl:inline-flex"
-            aria-label={text(
-              `团队工具: ${activeTeam.team_tools.length} 个可用`,
-              `Team tools: ${activeTeam.team_tools.length} available`,
-            )}
-            title={activeTeam.team_tools.join(", ")}
-          >
-            <Wrench aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-            <span className="min-w-0 truncate">
-              {activeTeam.team_tools[0] ?? text("无工具", "No tools")}
-              {activeTeam.team_tools.length > 1 ? ` +${activeTeam.team_tools.length - 1}` : ""}
-            </span>
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={onAddMember}
-            aria-label={text("添加成员", "Add member")}
-            title={text("添加成员", "Add member")}
-            className="hidden h-8 px-2"
-          >
-            <Plus aria-hidden="true" className="h-3.5 w-3.5" />
-            <span className="hidden lg:inline">{text("添加成员", "Add member")}</span>
-          </Button>
+          {desktopEnabled && workspaceView === "collaboration" && onToggleOverviewPanel ? (
+            <Button
+              type="button"
+              variant={overviewPanelOpen ? "secondary" : "ghost"}
+              onClick={onToggleOverviewPanel}
+              aria-label={overviewPanelOpen ? text("关闭团队状态", "Close team status") : text("打开团队状态", "Open team status")}
+              title={overviewPanelOpen ? text("关闭团队状态", "Close team status") : text("打开团队状态", "Open team status")}
+              className="h-8 w-8 px-0"
+            >
+              {overviewPanelOpen ? <PanelRightClose aria-hidden="true" className="h-3.5 w-3.5" /> : <PanelRightOpen aria-hidden="true" className="h-3.5 w-3.5" />}
+            </Button>
+          ) : null}
+          {desktopEnabled ? <DesktopWorkspaceMenu /> : null}
           <div className="relative">
             <Button
               type="button"
@@ -181,6 +164,7 @@ export function TeamHeader({
                 tasks={tasks}
                 text={text}
                 onClose={onCloseTaskBoard}
+                onRenameTask={onRenameTask}
               />
             ) : null}
           </div>
@@ -200,8 +184,20 @@ export function TeamHeader({
               <div
                 role="menu"
                 aria-label={text("更多团队操作", "More team actions")}
-                className="absolute right-0 top-full z-50 mt-2 w-52 rounded-lg border border-slate-200 bg-white p-1.5 text-left shadow-sm"
+                className="glass-surface-strong absolute right-0 top-full z-50 mt-2 w-52 rounded-2xl border border-ui-border/70 p-1.5 text-left shadow-glass"
               >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    onRenameTeam();
+                  }}
+                  className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-xs text-ui-muted hover:bg-ui-subtle hover:text-ui-ink"
+                >
+                  <Pencil aria-hidden="true" className="h-3.5 w-3.5 text-slate-500" />
+                  {text("重命名团队", "Rename team")}
+                </button>
                 <button
                   type="button"
                   role="menuitem"
@@ -209,7 +205,7 @@ export function TeamHeader({
                     setMoreOpen(false);
                     onAddMember();
                   }}
-                  className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-xs text-slate-700 hover:bg-slate-50"
+                  className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-xs text-ui-muted hover:bg-ui-subtle hover:text-ui-ink"
                 >
                   <Plus aria-hidden="true" className="h-3.5 w-3.5 text-slate-500" />
                   {text("添加成员", "Add member")}
@@ -249,7 +245,7 @@ export function TeamHeader({
                         if (activeTeam.active_goal?.status === "paused") onResumeGoal();
                         else onPauseGoal();
                       }}
-                      className="flex h-8 w-full items-center justify-between rounded-md px-2 text-xs text-slate-700 hover:bg-slate-50"
+                      className="flex h-8 w-full items-center justify-between rounded-lg px-2 text-xs text-ui-muted hover:bg-ui-subtle hover:text-ui-ink"
                     >
                       <span>{activeTeam.active_goal.status === "paused" ? text("继续目标", "Resume goal") : text("暂停目标", "Pause goal")}</span>
                       <Badge tone={goalTone(activeTeam.active_goal.status)}>{goalStatusLabel(activeTeam.active_goal.status, text)}</Badge>
@@ -261,7 +257,7 @@ export function TeamHeader({
                         setMoreOpen(false);
                         onEditGoal();
                       }}
-                      className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-xs text-slate-700 hover:bg-slate-50"
+                      className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-xs text-ui-muted hover:bg-ui-subtle hover:text-ui-ink"
                     >
                       {text("编辑目标", "Edit goal")}
                     </button>
@@ -275,3 +271,5 @@ export function TeamHeader({
     </header>
   );
 }
+import { DesktopWorkspaceMenu } from "../../../../components/desktop/DesktopWorkspaceMenu";
+import { useDesktopWorkspaceReturnPath } from "../../../../components/desktop/useDesktopWorkspaceReturnPath";

@@ -15,10 +15,13 @@ import {
 import { useSearchParams } from "react-router-dom";
 
 import { ConsoleShell } from "../../../app/ConsoleShell";
+import { DesktopPageHeader } from "../../../components/desktop/DesktopPageHeader";
+import { useDesktopWorkspaceReturnPath } from "../../../components/desktop/useDesktopWorkspaceReturnPath";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { useConfirmDialog } from "../../../components/ui/confirm-dialog";
 import { feedbackErrorMessage, notifyFeedback } from "../../../components/ui/feedback-toast";
+import { isDesktopRuntime } from "../../../lib/desktop-bridge";
 import { cn } from "../../../lib/utils";
 import type {
   ChangeAuditContext,
@@ -52,6 +55,8 @@ function getWorkspaceSelector(): (() => Promise<unknown>) | null {
 
 export function ChangeReviewPage() {
   const api = getChangeReviewApi();
+  const desktop = isDesktopRuntime();
+  const returnTo = useDesktopWorkspaceReturnPath();
   const selectWorkspaceRoot = getWorkspaceSelector();
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<ChangeReviewStatus | null>(null);
@@ -221,28 +226,50 @@ export function ChangeReviewPage() {
   return (
     <ConsoleShell title="本地变更">
       <div className="flex min-h-0 flex-1 flex-col bg-white">
-        <header className="flex min-h-14 items-center justify-between gap-3 border-b border-slate-200 px-4 py-2 sm:px-5">
-          <div className="min-w-0">
-            <h1 className="flex items-center gap-2 text-base font-semibold text-slate-950">
-              <FileDiff className="h-4 w-4" aria-hidden="true" />
-              本地变更
-            </h1>
-            <p className="mt-0.5 truncate text-xs text-slate-500">按文件和分块审查当前工作区</p>
-          </div>
-          {api ? (
-            <Button
-              type="button"
-              variant="ghost"
-              aria-label="刷新变更"
-              title="刷新变更"
-              disabled={statusLoad === "loading" || mutationPending}
-              onClick={() => void loadStatus(selectedPath)}
-              className="h-8 w-8 px-0"
-            >
-              <RefreshCw className={cn("h-4 w-4", statusLoad === "loading" && "animate-spin")} />
-            </Button>
-          ) : null}
-        </header>
+        {desktop ? (
+          <DesktopPageHeader
+            title="本地变更"
+            description={status?.state === "ready" ? `${status.files.length} 个变更文件` : "按文件和分块审查当前工作区"}
+            icon={FileDiff}
+            returnTo={returnTo}
+            actions={api ? (
+              <Button
+                type="button"
+                variant="ghost"
+                aria-label="刷新变更"
+                title="刷新变更"
+                disabled={statusLoad === "loading" || mutationPending}
+                onClick={() => void loadStatus(selectedPath)}
+                className="h-8 w-8 px-0"
+              >
+                <RefreshCw className={cn("h-4 w-4", statusLoad === "loading" && "animate-spin")} />
+              </Button>
+            ) : undefined}
+          />
+        ) : (
+          <header className="flex min-h-14 items-center justify-between gap-3 border-b border-slate-200 px-4 py-2 sm:px-5">
+            <div className="min-w-0">
+              <h1 className="flex items-center gap-2 text-base font-semibold text-slate-950">
+                <FileDiff className="h-4 w-4" aria-hidden="true" />
+                本地变更
+              </h1>
+              <p className="mt-0.5 truncate text-xs text-slate-500">按文件和分块审查当前工作区</p>
+            </div>
+            {api ? (
+              <Button
+                type="button"
+                variant="ghost"
+                aria-label="刷新变更"
+                title="刷新变更"
+                disabled={statusLoad === "loading" || mutationPending}
+                onClick={() => void loadStatus(selectedPath)}
+                className="h-8 w-8 px-0"
+              >
+                <RefreshCw className={cn("h-4 w-4", statusLoad === "loading" && "animate-spin")} />
+              </Button>
+            ) : null}
+          </header>
+        )}
 
         {!api ? (
           <CenteredState

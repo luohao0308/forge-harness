@@ -15,9 +15,12 @@ import {
   RefreshCw,
   Trash2,
   Webhook,
+  Workflow,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
+import { DesktopPageHeader } from "../../../components/desktop/DesktopPageHeader";
+import { useDesktopWorkspaceReturnPath } from "../../../components/desktop/useDesktopWorkspaceReturnPath";
 import { Badge, statusTone } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardHeader } from "../../../components/ui/card";
@@ -25,6 +28,7 @@ import { ConfigDialog } from "../../../components/ui/config-dialog";
 import { Input } from "../../../components/ui/input";
 import { MenuSelect } from "../../../components/ui/menu-select";
 import { useI18n } from "../../../lib/i18n";
+import { cn } from "../../../lib/utils";
 import { useOptionalAuth } from "../../auth/AuthProvider";
 import {
   API_BASE_URL,
@@ -83,12 +87,14 @@ export function AutomationPanel({
   agents,
   agentsLoading = false,
   onAgentChange,
+  desktopLayout = false,
 }: {
   agentId: string;
   agentLabel: string;
   agents?: Array<{ id: string; name: string }>;
   agentsLoading?: boolean;
   onAgentChange?: (agentId: string) => void;
+  desktopLayout?: boolean;
 }) {
   const { text } = useI18n();
   const auth = useOptionalAuth();
@@ -99,6 +105,7 @@ export function AutomationPanel({
   const [pendingDelete, setPendingDelete] = useState<AgentTrigger | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [copied, setCopied] = useState<"url" | "secret" | null>(null);
+  const returnTo = useDesktopWorkspaceReturnPath();
 
   const triggers = useQuery({
     queryKey: ["agent-triggers", agentId],
@@ -139,48 +146,106 @@ export function AutomationPanel({
   const capabilities = automationCapabilities(auth?.user?.permissions, auth?.user?.role ?? auth?.currentOrganization?.role);
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-3 sm:p-4">
-      <section className="flex min-w-0 flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-3">
-        <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-2">
-            <Code2 className="h-5 w-5 shrink-0 text-slate-600" />
-            <h1 className="truncate text-lg font-semibold text-slate-950">{text("自动化", "Automations")}</h1>
-            {agents ? (
-              <MenuSelect
-                ariaLabel={text("管理智能体", "Managed Agent")}
-                value={agentId}
-                size="compact"
-                disabled={agentsLoading || agents.length === 0}
-                placeholder={agentsLoading ? text("加载智能体...", "Loading Agents...") : text("暂无智能体", "No Agents")}
-                className="w-48 max-w-full"
-                options={agents.map((agent) => ({ value: agent.id, label: agent.name, meta: agent.id }))}
-                onChange={(nextAgentId) => {
-                  setSelectedTriggerId(null);
-                  setActionError(null);
-                  onAgentChange?.(nextAgentId);
-                }}
-              />
-            ) : <Badge tone="neutral" className="max-w-48 truncate">{agentLabel}</Badge>}
+    <div className={cn(
+      "flex min-h-0 min-w-0 flex-1 flex-col",
+      desktopLayout ? "overflow-hidden" : "overflow-y-auto p-3 sm:p-4",
+    )}>
+      {desktopLayout ? (
+        <DesktopPageHeader
+          title={text("自动化", "Automations")}
+          description={`${agentLabel} · Webhook / Schedule / File / Git`}
+          icon={Workflow}
+          returnTo={returnTo}
+          actions={(
+            <>
+              <Button
+                variant="ghost"
+                aria-label={text("刷新自动化", "Refresh automations")}
+                title={text("刷新自动化", "Refresh automations")}
+                onClick={() => void refresh()}
+                disabled={triggers.isFetching}
+                className="h-8 w-8 px-0"
+              >
+                <RefreshCw className={triggers.isFetching ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
+              </Button>
+              {!permissionDenied && capabilities.create ? (
+                <Button
+                  variant="ghost"
+                  aria-label={text("新建自动化", "New automation")}
+                  title={text("新建自动化", "New automation")}
+                  onClick={() => setCreateOpen(true)}
+                  className="h-8 w-8 px-0"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              ) : null}
+            </>
+          )}
+        />
+      ) : (
+        <section className="flex min-w-0 flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-3">
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <Code2 className="h-5 w-5 shrink-0 text-slate-600" />
+              <h1 className="truncate text-lg font-semibold text-slate-950">{text("自动化", "Automations")}</h1>
+              {agents ? (
+                <MenuSelect
+                  ariaLabel={text("管理智能体", "Managed Agent")}
+                  value={agentId}
+                  size="compact"
+                  disabled={agentsLoading || agents.length === 0}
+                  placeholder={agentsLoading ? text("加载智能体...", "Loading Agents...") : text("暂无智能体", "No Agents")}
+                  className="w-48 max-w-full"
+                  options={agents.map((agent) => ({ value: agent.id, label: agent.name, meta: agent.id }))}
+                  onChange={(nextAgentId) => {
+                    setSelectedTriggerId(null);
+                    setActionError(null);
+                    onAgentChange?.(nextAgentId);
+                  }}
+                />
+              ) : <Badge tone="neutral" className="max-w-48 truncate">{agentLabel}</Badge>}
+            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              {text("用外部事件或本机变化启动智能体运行。", "Start Agent runs from external events or local changes.")}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              {text("文件与 Git 触发仅在 Forge Harness Desktop 本机运行。", "File and Git triggers run only on this Forge Harness Desktop host.")}
+            </p>
           </div>
-          <p className="mt-1 text-sm text-slate-500">
-            {text("用外部事件或本机变化启动智能体运行。", "Start Agent runs from external events or local changes.")}
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            {text("文件与 Git 触发仅在 Forge Harness Desktop 本机运行。", "File and Git triggers run only on this Forge Harness Desktop host.")}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <Button aria-label={text("刷新自动化", "Refresh automations")} onClick={() => void refresh()} disabled={triggers.isFetching}>
-            <RefreshCw className={triggers.isFetching ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
-            {text("刷新", "Refresh")}
-          </Button>
-          {!permissionDenied && capabilities.create ? (
-            <Button variant="primary" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" /> {text("新建自动化", "New automation")}
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Button aria-label={text("刷新自动化", "Refresh automations")} onClick={() => void refresh()} disabled={triggers.isFetching}>
+              <RefreshCw className={triggers.isFetching ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
+              {text("刷新", "Refresh")}
             </Button>
-          ) : null}
-        </div>
-      </section>
+            {!permissionDenied && capabilities.create ? (
+              <Button variant="primary" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-3.5 w-3.5" /> {text("新建自动化", "New automation")}
+              </Button>
+            ) : null}
+          </div>
+        </section>
+      )}
+
+      <div className={cn("min-w-0", desktopLayout && "min-h-0 flex-1 overflow-y-auto p-3 sm:p-4")}>
+        {desktopLayout && agents ? (
+          <div className="mb-3 flex min-w-0 items-center gap-2 border-b border-ui-border pb-3">
+            <span className="shrink-0 text-xs font-medium text-ui-muted">{text("智能体", "Agent")}</span>
+            <MenuSelect
+              ariaLabel={text("管理智能体", "Managed Agent")}
+              value={agentId}
+              size="compact"
+              disabled={agentsLoading || agents.length === 0}
+              placeholder={agentsLoading ? text("加载智能体...", "Loading Agents...") : text("暂无智能体", "No Agents")}
+              className="w-48 max-w-full"
+              options={agents.map((agent) => ({ value: agent.id, label: agent.name, meta: agent.id }))}
+              onChange={(nextAgentId) => {
+                setSelectedTriggerId(null);
+                setActionError(null);
+                onAgentChange?.(nextAgentId);
+              }}
+            />
+          </div>
+        ) : null}
 
       {triggers.isLoading ? (
         <div className="py-12 text-center text-sm text-slate-500">{text("正在加载自动化...", "Loading automations...")}</div>
@@ -273,6 +338,7 @@ export function AutomationPanel({
           />
         </div>
       ) : null}
+      </div>
 
       <CreateAutomationDialog
         open={createOpen}

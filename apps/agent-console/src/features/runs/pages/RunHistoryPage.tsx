@@ -4,6 +4,8 @@ import { Link } from "react-router-dom";
 import { useMemo, useState } from "react";
 
 import { ConsoleShell } from "../../../app/ConsoleShell";
+import { DesktopPageHeader } from "../../../components/desktop/DesktopPageHeader";
+import { useDesktopWorkspaceReturnPath } from "../../../components/desktop/useDesktopWorkspaceReturnPath";
 import { Badge, statusTone } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardHeader } from "../../../components/ui/card";
@@ -12,13 +14,17 @@ import { SkeletonTable } from "../../../components/ui/Skeleton";
 import { Table, Td, Th } from "../../../components/ui/table";
 import { TermHint } from "../../../components/ui/term";
 import { VirtualList } from "../../../components/ui/VirtualList";
+import { isDesktopRuntime } from "../../../lib/desktop-bridge";
+import { desktopOperationPath } from "../../../lib/desktop-navigation";
 import { useI18n } from "../../../lib/i18n";
 import { statusLabel } from "../../../lib/labels";
-import { formatShortDate } from "../../../lib/utils";
+import { cn, formatShortDate } from "../../../lib/utils";
 import { getObservabilitySummary, listRunsPage, type Task } from "../../tasks/api";
 
 export function RunHistoryPage() {
   const { text } = useI18n();
+  const desktop = isDesktopRuntime();
+  const returnTo = useDesktopWorkspaceReturnPath();
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [search, setSearch] = useState("");
   const runs = useInfiniteQuery({
@@ -49,32 +55,49 @@ export function RunHistoryPage() {
 
   return (
     <ConsoleShell title={text("智能体运行历史", "Agent Runs")}>
-      <div className="space-y-4 p-4">
-        <section className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 text-slate-600">
-              <History className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-slate-950">
-                {text("运行历史", "Run History")}
+      <div className={cn("min-h-0 flex-1", desktop ? "flex flex-col bg-ui-page" : "space-y-4 p-4")}>
+        {desktop ? (
+          <DesktopPageHeader
+            title={text("运行历史", "Run History")}
+            description={text(
+              `${items.length} 个运行 · 运行中 ${running} · 失败 ${failed}`,
+              `${items.length} runs · ${running} running · ${failed} failed`,
+            )}
+            icon={History}
+            returnTo={returnTo}
+          />
+        ) : (
+          <section className="glass-surface flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ui-border/70 px-4 py-3 shadow-glass">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 text-slate-600">
+                <History className="h-4 w-4" />
               </div>
-              <div className="mt-0.5 flex flex-wrap gap-3 text-xs text-slate-500">
-                <span>{text(`${items.length} 个运行`, `${items.length} runs`)}</span>
-                <span>{text(`运行中 ${running}`, `${running} running`)}</span>
-                <span>{text(`失败 ${failed}`, `${failed} failed`)}</span>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-slate-950">
+                  {text("运行历史", "Run History")}
+                </div>
+                <div className="mt-0.5 flex flex-wrap gap-3 text-xs text-slate-500">
+                  <span>{text(`${items.length} 个运行`, `${items.length} runs`)}</span>
+                  <span>{text(`运行中 ${running}`, `${running} running`)}</span>
+                  <span>{text(`失败 ${failed}`, `${failed} failed`)}</span>
+                </div>
               </div>
             </div>
-          </div>
-          <Link to="/agents/default/workspace">
-            <Button variant="primary">
-              <Bot className="h-3.5 w-3.5" />
-              {text("工作台", "Workspace")}
-            </Button>
-          </Link>
-        </section>
+            <Link to="/agents/default/workspace">
+              <Button variant="primary">
+                <Bot className="h-3.5 w-3.5" />
+                {text("工作台", "Workspace")}
+              </Button>
+            </Link>
+          </section>
+        )}
 
-        <Card className="overflow-hidden">
+        <Card
+          className={cn(
+            "overflow-hidden",
+            desktop && "m-0 flex min-h-0 flex-1 flex-col rounded-none border-x-0 border-b-0 shadow-none",
+          )}
+        >
           <CardHeader className="flex-wrap gap-3">
             <div className="text-sm font-semibold text-slate-900">
               {text("运行列表", "Run List")}
@@ -86,7 +109,7 @@ export function RunHistoryPage() {
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder={text("搜索标题 / 目标 / 模型", "Search title / goal / model")}
-                  className="h-8 w-[15rem] rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 outline-none placeholder:text-slate-400 focus:border-slate-400"
+                      className="glass-control h-8 w-[15rem] rounded-xl border border-ui-border/70 px-3 text-xs text-slate-700 outline-none placeholder:text-slate-400 focus:border-slate-400"
                 />
               </label>
               {[
@@ -137,40 +160,42 @@ export function RunHistoryPage() {
                 actions={[
                   {
                     label: text("打开工作台", "Open Workspace"),
-                    href: "/agents/default/workspace",
+                    href: desktop ? returnTo : "/agents/default/workspace",
                     primary: true,
                   },
                 ]}
               />
             </div>
           ) : (
-            <div className="min-w-[860px]" role="region" aria-label={text("运行列表", "Run List")}>
-              <Table className="table-fixed">
-                <thead className="bg-slate-50 text-slate-500">
-                  <tr>
-                    <Th className="w-[34%]">运行</Th>
-                    <Th className="w-[12%]">{text("状态", "Status")}</Th>
-                    <Th className="w-[18%]">{text("模型", "Model")}</Th>
-                    <Th>
-                      <TermHint description="智能体运行平台">运行平台</TermHint>
-                    </Th>
-                    <Th className="w-[14%]">{text("更新时间", "Updated")}</Th>
-                    <Th className="w-12" />
-                  </tr>
-                </thead>
-              </Table>
-              <VirtualList
-                items={filteredItems}
-                estimateSize={64}
-                height={Math.min(620, Math.max(260, filteredItems.length * 64))}
-                renderItem={(run) => (
-                  <Table className="table-fixed">
-                    <tbody>
-                      <RunRow run={run} />
-                    </tbody>
-                  </Table>
-                )}
-              />
+            <div className={desktop ? "min-w-0 overflow-x-auto" : undefined}>
+              <div className="min-w-[860px]" role="region" aria-label={text("运行列表", "Run List")}>
+                <Table className="table-fixed">
+                  <thead className="bg-slate-50 text-slate-500">
+                    <tr>
+                      <Th className="w-[34%]">运行</Th>
+                      <Th className="w-[12%]">{text("状态", "Status")}</Th>
+                      <Th className="w-[18%]">{text("模型", "Model")}</Th>
+                      <Th>
+                        <TermHint description="智能体运行平台">运行平台</TermHint>
+                      </Th>
+                      <Th className="w-[14%]">{text("更新时间", "Updated")}</Th>
+                      <Th className="w-12" />
+                    </tr>
+                  </thead>
+                </Table>
+                <VirtualList
+                  items={filteredItems}
+                  estimateSize={64}
+                  height={Math.min(620, Math.max(260, filteredItems.length * 64))}
+                  renderItem={(run) => (
+                    <Table className="table-fixed">
+                      <tbody>
+                        <RunRow run={run} returnTo={returnTo} desktop={desktop} />
+                      </tbody>
+                    </Table>
+                  )}
+                />
+              </div>
             </div>
           )}
         </Card>
@@ -179,11 +204,14 @@ export function RunHistoryPage() {
   );
 }
 
-function RunRow({ run }: { run: Task }) {
+function RunRow({ run, returnTo, desktop }: { run: Task; returnTo: string; desktop: boolean }) {
+  const detailPath = desktop
+    ? desktopOperationPath(`/runs/${run.id}`, returnTo)
+    : `/runs/${run.id}`;
   return (
     <tr className="border-t border-slate-100 hover:bg-slate-50/60">
       <Td>
-        <Link to={`/runs/${run.id}`} className="font-medium text-slate-950 hover:underline">
+        <Link to={detailPath} className="font-medium text-slate-950 hover:underline">
           {run.title}
         </Link>
         <div className="mt-1 flex items-center gap-2">
@@ -208,7 +236,7 @@ function RunRow({ run }: { run: Task }) {
       </Td>
       <Td className="font-mono text-slate-500">{formatShortDate(run.updated_at)}</Td>
       <Td className="text-right">
-        <Link to={`/runs/${run.id}`} className="inline-flex text-slate-400 hover:text-slate-800">
+        <Link to={detailPath} className="inline-flex text-slate-400 hover:text-slate-800">
           <ArrowUpRight className="h-4 w-4" />
         </Link>
       </Td>

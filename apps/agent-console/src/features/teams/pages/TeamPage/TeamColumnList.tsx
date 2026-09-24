@@ -4,6 +4,7 @@ import type { MutableRefObject, ReactNode } from "react";
 import { cn } from "../../../../lib/utils";
 import type { ComposerAttachment } from "../../../agents/components/ChatComposer";
 import type { InspectorSection, WorkspaceMode } from "../../../agents/lib/types";
+import type { PermissionMode, ReasoningEffort } from "../../../agents/lib/workspaceSettings";
 import type { ContextCompressionSummary } from "../../../agents/lib/contextCompression";
 import type { ConversationNode } from "../../../../stores/workspaceStore";
 import type { Team, TeamAgent, TeamMailboxMessage, TeamTask, ToolMetadata } from "../../../tasks/api";
@@ -128,6 +129,8 @@ export function TeamColumnList({
     target: string,
     attachments: ComposerAttachment[],
     mode: WorkspaceMode,
+    reasoningEffort: ReasoningEffort,
+    permissionMode: PermissionMode,
   ) => void;
   onMessageActionSend: (sourceSlotId: string, content: string, target: string) => void;
   onBranchMessage: (agent: TeamAgent, entries: TeamConversationEntry[], nodeId: string) => void;
@@ -152,7 +155,7 @@ export function TeamColumnList({
               role="group"
               aria-label={text("代理会话列", "Agent columns")}
               className={cn(
-                "flex h-full min-h-0 w-full snap-x snap-proximity overflow-x-auto overflow-y-hidden bg-white [scrollbar-width:none]",
+        "flex h-full min-h-0 w-full snap-x snap-proximity overflow-x-auto overflow-y-hidden bg-ui-page [scrollbar-width:none]",
                 (fullscreenSlotId ? 1 : orderedAgents.length) <= 2 ? "justify-start" : "",
               )}
             >
@@ -345,6 +348,8 @@ function TeamAgentColumn({
     target: string,
     attachments: ComposerAttachment[],
     mode: WorkspaceMode,
+    reasoningEffort: ReasoningEffort,
+    permissionMode: PermissionMode,
   ) => void;
   onMessageActionSend: (sourceSlotId: string, content: string, target: string) => void;
   onBranchMessage: (agent: TeamAgent, entries: TeamConversationEntry[], nodeId: string) => void;
@@ -370,13 +375,17 @@ function TeamAgentColumn({
       selectedMode,
       composer.draft.trim(),
       selectedFiles,
+      composer.reasoningEffort,
+      composer.permissionMode,
     ) ||
     (
       send.sourceSlotId === agent.slot_id &&
       send.target === selectedTarget &&
       send.content === composer.draft.trim() &&
       send.mode === selectedMode &&
-      send.files.join("\n") === selectedFiles.join("\n")
+      send.files.join("\n") === selectedFiles.join("\n") &&
+      send.reasoningEffort === (composer.reasoningEffort ?? "high") &&
+      send.permissionMode === (composer.permissionMode ?? "confirm")
     )
   ));
 
@@ -404,7 +413,8 @@ function TeamAgentColumn({
       visibleColumnCount={visibleColumnCount}
       fullscreen={fullscreen}
       onComposerChange={(next) => onComposerChange(agent.slot_id, next)}
-      onSend={(content, target, mode) => onSendFromComposer(agent, content, target, attachments, mode)}
+      onSend={(content, target, mode, reasoningEffort, permissionMode) =>
+        onSendFromComposer(agent, content, target, attachments, mode, reasoningEffort, permissionMode)}
       onMessageActionSend={(content, target) => onMessageActionSend(agent.slot_id, content, target)}
       onBranchMessage={(nodeId, entries) => onBranchMessage(agent, entries, nodeId)}
       onSwitchBranch={(anchorUserId, nodeId) => onSwitchBranch(agent.slot_id, anchorUserId, nodeId)}

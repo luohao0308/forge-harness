@@ -9,11 +9,13 @@ import {
   Loader2,
   MessageSquareText,
   Monitor,
+  Pencil,
   Sparkles,
   Wrench,
   X,
 } from "lucide-react";
 
+import { DesktopWorkspaceMenu } from "../../../components/desktop/DesktopWorkspaceMenu";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { MenuSelect } from "../../../components/ui/menu-select";
@@ -38,6 +40,8 @@ export type WorkspaceShellBarProps = {
   onWorkspaceChange?: (workspaceId: string) => void;
   agentId: string;
   agentName: string;
+  conversationTitle?: string;
+  onRenameConversation?: () => void;
   activeRunId: string | null;
   runStatus?: string;
   tools: ToolMetadata[];
@@ -71,6 +75,8 @@ export function WorkspaceShellBar({
   onWorkspaceChange,
   agentId,
   agentName,
+  conversationTitle,
+  onRenameConversation,
   activeRunId,
   runStatus,
   tools,
@@ -149,21 +155,20 @@ export function WorkspaceShellBar({
             ? "text-emerald-600"
             : connection.status === "offline"
               ? "text-amber-600"
-              : "text-slate-500",
+              : "text-ui-muted",
         )}
       />
     ),
     group: text("本地 Agent", "Local Agents"),
   }));
   const agentOptions = [...cloudAgentOptions, ...localAgentOptions];
-
   useOutsideClick(toolsPickerRef, () => setToolsOpen(false), toolsOpen);
 
   return (
     <header
       data-testid={desktop ? "desktop-workspace-header" : undefined}
       className={cn(
-        "relative z-30 shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur",
+        "relative z-30 shrink-0 border-b border-ui-border bg-ui-surface/95 backdrop-blur",
         desktop ? "px-3 py-1.5" : "px-3 py-2 sm:px-4",
       )}
     >
@@ -177,7 +182,7 @@ export function WorkspaceShellBar({
           {!desktop ? (
             <Link
               to="/agents"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ui-muted transition-colors hover:bg-ui-subtle hover:text-ui-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong"
               aria-label={text("返回智能体列表", "Back to Agent Studio")}
               title={text("返回智能体列表", "Back to Agent Studio")}
             >
@@ -202,17 +207,34 @@ export function WorkspaceShellBar({
                 size="compact"
                 className={cn("w-full min-w-0", desktop ? "max-w-[14rem]" : "max-w-[20rem]")}
                 buttonClassName={cn(
-                  "rounded-lg border-transparent bg-transparent px-1.5 py-1 shadow-none hover:border-slate-200",
+                  "rounded-lg border-transparent bg-transparent px-1.5 py-1 shadow-none hover:border-ui-border",
                   desktop ? "h-8" : "h-9",
                 )}
                 menuClassName="left-auto right-0 w-[min(18rem,calc(100vw-3rem))] max-w-[calc(100vw-3rem)]"
               />
             ) : (
-              <span className="inline-flex min-w-0 items-center gap-1.5 text-sm font-semibold text-slate-900">
-                <Bot aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-500" />
+              <span className="inline-flex min-w-0 items-center gap-1.5 text-sm font-semibold text-ui-ink">
+                <Bot aria-hidden="true" className="h-4 w-4 shrink-0 text-ui-muted" />
                 <span className="truncate">{agentName}</span>
               </span>
             )}
+            {conversationTitle ? (
+              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-ui-muted sm:mt-0">
+                <MessageSquareText aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-ui-faint" />
+                <span className="min-w-0 max-w-[18rem] truncate">{conversationTitle}</span>
+                {onRenameConversation ? (
+                  <button
+                    type="button"
+                    onClick={onRenameConversation}
+                    aria-label={text("重命名对话", "Rename conversation")}
+                    title={text("重命名对话", "Rename conversation")}
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-ui-faint transition-colors hover:bg-ui-subtle hover:text-ui-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong"
+                  >
+                    <Pencil aria-hidden="true" className="h-3 w-3" />
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             {!desktop && onWorkspaceChange && workspaceOptions.length > 0 ? (
               <MenuSelect
                 ariaLabel={text("切换工作区", "Switch workspace")}
@@ -226,18 +248,18 @@ export function WorkspaceShellBar({
                 size="compact"
                 className={cn("w-full min-w-0", desktop ? "max-w-[12rem]" : "mt-1 max-w-[20rem]")}
                 buttonClassName={cn(
-                  "h-8 rounded-lg bg-white/90 px-2 shadow-none",
-                  desktop ? "border-transparent hover:border-slate-200" : "border-slate-200",
+                  "h-8 rounded-lg bg-ui-surface/90 px-2 shadow-none",
+                  desktop ? "border-transparent hover:border-ui-border" : "border-ui-border",
                 )}
                 menuClassName="left-0 w-[min(18rem,calc(100vw-3rem))] max-w-[calc(100vw-3rem)]"
               />
             ) : null}
             {!desktop ? (
-              <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] leading-4 text-slate-500">
+              <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] leading-4 text-ui-muted">
                 <span className="hidden sm:inline">
                   {text("模型加运行平台组成智能体", "Model + Harness = Agent")}
                 </span>
-                <span className="hidden text-slate-300 sm:inline">·</span>
+                <span className="hidden text-ui-faint sm:inline">·</span>
                 {localAgentControl}
               </div>
             ) : null}
@@ -246,6 +268,8 @@ export function WorkspaceShellBar({
 
         <div className={cn("flex min-w-0 items-center justify-end gap-1.5", !desktop && "flex-wrap")}>
           {summaryManager}
+
+          {desktop ? <DesktopWorkspaceMenu /> : null}
 
           {onCreateTeamFromConversation ? (
             <Button
@@ -275,11 +299,11 @@ export function WorkspaceShellBar({
               aria-expanded={toolsOpen}
               title={toolsChipLabel}
               className={cn(
-                "inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400",
+                "inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-ui-border bg-ui-surface text-xs font-medium text-ui-ink transition-colors hover:bg-ui-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong",
                 desktop ? "w-8 px-0" : "max-w-[12rem] px-2",
               )}
             >
-              <Wrench aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-slate-500" />
+              <Wrench aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-ui-muted" />
               <span className={desktop ? "sr-only" : "min-w-0 truncate"}>{toolsPreviewLabel}</span>
             </button>
 
@@ -288,14 +312,14 @@ export function WorkspaceShellBar({
                 role="dialog"
                 aria-modal="false"
                 aria-label={text("工具", "Tools")}
-                className="absolute right-0 top-full z-40 mt-1.5 w-[min(280px,calc(100vw-1rem))] rounded-2xl border border-slate-200 bg-white p-2 shadow-none"
+                className="absolute right-0 top-full z-40 mt-1.5 w-[min(280px,calc(100vw-1rem))] rounded-lg border border-ui-border bg-ui-surface p-2 shadow-[0_8px_24px_rgba(36,36,40,0.10)]"
               >
-                <div className="mb-2 flex items-start justify-between gap-2 border-b border-slate-100 px-1 pb-2">
+                <div className="mb-2 flex items-start justify-between gap-2 border-b border-ui-border px-1 pb-2">
                   <div className="min-w-0">
-                    <div className="text-xs font-semibold text-slate-900">
+                    <div className="text-xs font-semibold text-ui-ink">
                       {text("工具快捷插入", "Quick tool insert")}
                     </div>
-                    <div className="mt-0.5 text-[11px] leading-4 text-slate-500">
+                    <div className="mt-0.5 text-[11px] leading-4 text-ui-muted">
                       {text(
                         "点击任一能力名，立即把 @工具 名称写入输入框。",
                         "Click a capability to insert its @mention into the composer.",
@@ -306,14 +330,14 @@ export function WorkspaceShellBar({
                     type="button"
                     aria-label={text("关闭工具列表", "Close tool list")}
                     onClick={() => setToolsOpen(false)}
-                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ui-faint transition-colors hover:bg-ui-subtle hover:text-ui-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong"
                   >
                     <X aria-hidden="true" className="h-4 w-4" />
                   </button>
                 </div>
                 <div className="max-h-44 overflow-y-auto">
                   {tools.length === 0 ? (
-                    <p className="px-2 py-1.5 text-xs text-slate-500">
+                    <p className="px-2 py-1.5 text-xs text-ui-muted">
                       {text("暂无工具功能", "No tool capabilities")}
                     </p>
                   ) : (
@@ -325,10 +349,10 @@ export function WorkspaceShellBar({
                           onInsertToolMention(tool.name);
                           setToolsOpen(false);
                         }}
-                        className="block w-full rounded-md px-1.5 py-1 text-left text-xs text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                        className="block w-full rounded-md px-1.5 py-1 text-left text-xs text-ui-ink hover:bg-ui-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong"
                       >
                         <span className="block truncate font-mono">@{tool.name}</span>
-                        <span className="block truncate text-[11px] text-slate-500">
+                        <span className="block truncate text-[11px] text-ui-muted">
                           {tool.description || tool.category}
                         </span>
                       </button>
@@ -351,14 +375,14 @@ export function WorkspaceShellBar({
               <Link
                 to={activeRunPath}
                 className={cn(
-                  "inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-200 bg-white text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400",
+                  "inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-ui-border bg-ui-surface text-xs font-medium text-ui-ink transition-colors hover:bg-ui-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong",
                   desktop ? "w-8 px-0" : "px-2",
                 )}
                 aria-label={runLabel}
                 title={runLabel}
               >
                 <GitBranch aria-hidden="true" className="h-3.5 w-3.5" />
-                <span className={desktop ? "sr-only" : "hidden text-slate-500 lg:inline"}>运行</span>
+                <span className={desktop ? "sr-only" : "hidden text-ui-muted lg:inline"}>运行</span>
                 <span className={desktop ? "sr-only" : undefined}>{runStatusText}</span>
               </Link>
               {desktop ? (
@@ -380,7 +404,7 @@ export function WorkspaceShellBar({
             </div>
           ) : !desktop ? (
             <span
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 text-xs font-medium text-slate-500"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-ui-border bg-ui-subtle px-2 text-xs font-medium text-ui-muted"
               aria-label={runLabel}
               title={runLabel}
             >

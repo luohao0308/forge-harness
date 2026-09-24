@@ -31,6 +31,7 @@ import { Input, Textarea } from "../../../components/ui/input";
 import { Card, CardHeader } from "../../../components/ui/card";
 import { MenuSelect } from "../../../components/ui/menu-select";
 import { RefreshOverlay } from "../../../components/ui/refresh-overlay";
+import { isDesktopRuntime } from "../../../lib/desktop-bridge";
 import { cn } from "../../../lib/utils";
 import { useI18n } from "../../../lib/i18n";
 import { statusLabel } from "../../../lib/labels";
@@ -547,6 +548,7 @@ export function AgentListPage() {
           agents={(agents.data?.items ?? []).map((agent) => ({ id: agent.id, name: agent.name }))}
           agentsLoading={agents.isLoading}
           onAgentChange={selectConfigurationAgent}
+          desktopLayout={isDesktopRuntime()}
         />
       </ConsoleShell>
     );

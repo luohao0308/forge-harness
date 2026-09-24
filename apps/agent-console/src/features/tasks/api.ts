@@ -605,6 +605,8 @@ export type LocalAgentSendMessagePayload = {
   workspace_mode?: AgentChatStreamPayload["mode"];
   model_provider?: string | null;
   model_name?: string | null;
+  reasoning_effort?: "light" | "medium" | "high" | "xhigh" | "max";
+  permission_mode?: "confirm" | "auto-edit" | "full-auto";
   messages?: AgentChatStreamMessage[];
   active_leaf_id?: string | null;
   active_branch_id?: string | null;
@@ -828,6 +830,8 @@ export type TeamMessageCreatePayload = {
   summary?: string | null;
   files?: string[];
   mode?: TeamMessageMode;
+  reasoning_effort?: "light" | "medium" | "high" | "xhigh" | "max";
+  permission_mode?: "confirm" | "auto-edit" | "full-auto";
 };
 
 export type TeamTaskCreatePayload = {
@@ -841,6 +845,7 @@ export type TeamTaskCreatePayload = {
 };
 
 export type TeamTaskUpdatePayload = {
+  subject?: string | null;
   status?: "pending" | "in_progress" | "completed" | "deleted";
   owner?: string | null;
   ownerSlotId?: string | null;
@@ -1024,6 +1029,8 @@ export type AgentChatStreamPayload = {
   goal?: string | null;
   model_provider?: string | null;
   model_name?: string | null;
+  reasoning_effort?: "light" | "medium" | "high" | "xhigh" | "max";
+  permission_mode?: "confirm" | "auto-edit" | "full-auto";
   messages: AgentChatStreamMessage[];
   active_leaf_id?: string | null;
   run_id?: string | null;

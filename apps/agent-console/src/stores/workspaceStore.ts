@@ -15,6 +15,7 @@ import {
   computeConversationTitle,
   generateConversationId,
   genesisConversation,
+  normalizeConversationTitle,
   saveConversationsSnapshot,
   saveHistoryPanelCollapsed,
   sortConversationsByUpdatedAt,
@@ -24,6 +25,14 @@ import {
   readWorkspaceRegistrySnapshot,
   saveWorkspaceRegistrySnapshot,
 } from "./workspaceRegistryPersistence";
+import {
+  DEFAULT_PERMISSION_MODE,
+  DEFAULT_REASONING_EFFORT,
+  normalizePermissionMode,
+  normalizeReasoningEffort,
+  type PermissionMode,
+  type ReasoningEffort,
+} from "../features/agents/lib/workspaceSettings";
 
 export type ConversationRole = "user" | "assistant" | "system" | "tool";
 export type ConversationState = "draft" | "streaming" | "paused" | "done" | "error";
@@ -88,6 +97,9 @@ export type WorkspaceConfig = {
   autoCompressionRatio: number;
   historyPanelCollapsed: boolean;
   localFileRootPath: string | null;
+  /** Optional on persisted snapshots written before DESK-007 S1. */
+  reasoningEffort?: ReasoningEffort;
+  permissionMode?: PermissionMode;
 };
 
 export type WorkspaceRegistryEntry = {
@@ -129,6 +141,8 @@ type WorkspaceState = {
    */
   contextMaxTokens: number;
   autoCompressionRatio: number;
+  reasoningEffort: ReasoningEffort;
+  permissionMode: PermissionMode;
   contextCompressions: Record<string, ContextCompressionSummary>;
   // --- v5 additive fields (Run state persistence across navigation) ---
   /** Active Run id; survives route navigation so returning to Workspace shows the last Run. */
@@ -173,6 +187,8 @@ type WorkspaceState = {
   /** Route the value through `clampContextMaxTokens` before writing. */
   setContextMaxTokens: (value: number) => void;
   setAutoCompressionRatio: (value: number) => void;
+  setReasoningEffort: (value: ReasoningEffort) => void;
+  setPermissionMode: (value: PermissionMode) => void;
   setContextCompression: (branchKey: string, summary: ContextCompressionSummary) => void;
   clearContextCompression: (branchKey: string) => void;
   // --- v5 additive actions ---
@@ -218,6 +234,8 @@ function defaultWorkspaceConfig(): WorkspaceConfig {
     autoCompressionRatio: AUTO_COMPRESSION_RATIO_DEFAULT,
     historyPanelCollapsed: false,
     localFileRootPath: null,
+    reasoningEffort: DEFAULT_REASONING_EFFORT,
+    permissionMode: DEFAULT_PERMISSION_MODE,
   };
 }
 
@@ -234,6 +252,8 @@ function normalizeWorkspaceRegistryEntry(
       ),
       historyPanelCollapsed: entry?.config.historyPanelCollapsed ?? false,
       localFileRootPath: entry?.config.localFileRootPath ?? null,
+      reasoningEffort: normalizeReasoningEffort(entry?.config.reasoningEffort),
+      permissionMode: normalizePermissionMode(entry?.config.permissionMode),
     },
   };
 }
@@ -290,7 +310,7 @@ function mergeRuntimeIntoConversations(
           contextWindowTurns: state.contextWindowTurns,
           contextCompressions: state.contextCompressions,
           updated_at: now,
-          title: computeConversationTitle(state.nodesById, c.title),
+          title: c.titleIsCustom ? c.title : computeConversationTitle(state.nodesById, c.title),
         }
       : c,
   );
@@ -313,6 +333,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   // v4 — see field doc for why we bypass `clampContextMaxTokens` here.
   contextMaxTokens: CONTEXT_MAX_TOKENS_DEFAULT,
   autoCompressionRatio: AUTO_COMPRESSION_RATIO_DEFAULT,
+  reasoningEffort: DEFAULT_REASONING_EFFORT,
+  permissionMode: DEFAULT_PERMISSION_MODE,
   contextCompressions: initialGenesis.contextCompressions,
   // v5 — persists across navigation
   activeRunId: null,
@@ -336,6 +358,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       contextWindowTurns: 8,
       contextMaxTokens: CONTEXT_MAX_TOKENS_DEFAULT,
       autoCompressionRatio: AUTO_COMPRESSION_RATIO_DEFAULT,
+      reasoningEffort: DEFAULT_REASONING_EFFORT,
+      permissionMode: DEFAULT_PERMISSION_MODE,
       contextCompressions: {},
       activeRunId: null,
       workspaceRegistry: {
@@ -599,12 +623,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       draftFromNodeId: null,
     });
   },
-  renameConversation: (id, title) =>
+  renameConversation: (id, title) => {
+    const normalized = normalizeConversationTitle(title);
+    if (normalized === null) return;
     set((state) => ({
       conversations: state.conversations.map((c) =>
-        c.id === id ? { ...c, title, updated_at: new Date().toISOString() } : c,
+        c.id === id
+          ? { ...c, title: normalized, titleIsCustom: true, updated_at: new Date().toISOString() }
+          : c,
       ),
-    })),
+    }));
+  },
   setHistoryPanelCollapsed: (collapsed) =>
     set((state) => {
       const workspaceId = state.activeWorkspaceId;
@@ -661,6 +690,44 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
           : null),
       };
     }),
+  setReasoningEffort: (value) =>
+    set((state) => {
+      const nextValue = normalizeReasoningEffort(value);
+      const workspaceId = state.activeWorkspaceId;
+      const nextEntry = updateWorkspaceRegistryEntry(state, workspaceId, {
+        reasoningEffort: nextValue,
+      });
+      return {
+        reasoningEffort: nextValue,
+        ...(nextEntry
+          ? {
+              workspaceRegistry: {
+                ...state.workspaceRegistry,
+                [workspaceId]: nextEntry,
+              },
+            }
+          : null),
+      };
+    }),
+  setPermissionMode: (value) =>
+    set((state) => {
+      const nextValue = normalizePermissionMode(value);
+      const workspaceId = state.activeWorkspaceId;
+      const nextEntry = updateWorkspaceRegistryEntry(state, workspaceId, {
+        permissionMode: nextValue,
+      });
+      return {
+        permissionMode: nextValue,
+        ...(nextEntry
+          ? {
+              workspaceRegistry: {
+                ...state.workspaceRegistry,
+                [workspaceId]: nextEntry,
+              },
+            }
+          : null),
+      };
+    }),
   setContextCompression: (branchKey, summary) =>
     set((state) => ({
       contextCompressions: {
@@ -698,6 +765,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       contextMaxTokens: workspace.config.contextMaxTokens,
       autoCompressionRatio: workspace.config.autoCompressionRatio,
       historyPanelCollapsed: workspace.config.historyPanelCollapsed,
+      reasoningEffort: normalizeReasoningEffort(workspace.config.reasoningEffort),
+      permissionMode: normalizePermissionMode(workspace.config.permissionMode),
     });
   },
   updateWorkspaceConfig: (workspaceId, patch) =>
@@ -709,6 +778,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         config: {
           ...entry.config,
           ...patch,
+          reasoningEffort: normalizeReasoningEffort(
+            patch.reasoningEffort ?? entry.config.reasoningEffort,
+          ),
+          permissionMode: normalizePermissionMode(
+            patch.permissionMode ?? entry.config.permissionMode,
+          ),
         },
       };
       return {
@@ -721,6 +796,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
               contextMaxTokens: nextEntry.config.contextMaxTokens,
               autoCompressionRatio: nextEntry.config.autoCompressionRatio,
               historyPanelCollapsed: nextEntry.config.historyPanelCollapsed,
+              reasoningEffort: normalizeReasoningEffort(nextEntry.config.reasoningEffort),
+              permissionMode: normalizePermissionMode(nextEntry.config.permissionMode),
             }
           : null),
       };
@@ -781,6 +858,8 @@ if (restoredWorkspaceRegistry !== null) {
       contextMaxTokens: activeWorkspace.config.contextMaxTokens,
       autoCompressionRatio: activeWorkspace.config.autoCompressionRatio,
       historyPanelCollapsed: activeWorkspace.config.historyPanelCollapsed,
+      reasoningEffort: normalizeReasoningEffort(activeWorkspace.config.reasoningEffort),
+      permissionMode: normalizePermissionMode(activeWorkspace.config.permissionMode),
     };
   });
 }

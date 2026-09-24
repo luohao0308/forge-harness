@@ -312,6 +312,18 @@ function routeTeamApis(state: TeamState) {
     }
 
     const teamMatch = path.match(/^\/api\/teams\/([^/]+)$/);
+    if (teamMatch && method === "PATCH") {
+      const team = state.teams.find((candidate) => candidate.id === teamMatch[1]);
+      if (!team) {
+        await json(route, { detail: "not found" }, 404);
+        return;
+      }
+      const payload = parseBody<{ name?: string }>(route.request());
+      if (typeof payload.name === "string") team.name = payload.name;
+      team.updated_at = now;
+      await json(route, team);
+      return;
+    }
     if (teamMatch && method === "GET") {
       const team = state.teams.find((candidate) => candidate.id === teamMatch[1]);
       await json(route, team ?? { detail: "not found" }, team ? 200 : 404);
@@ -654,6 +666,7 @@ test.describe("Team Mode browser smoke", () => {
     const viewSwitch = page.getByRole("group", { name: "团队工作区视图" });
     await expect(viewSwitch.getByRole("button", { name: "协作" })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("desktop-team-overview")).toBeVisible();
+    await page.getByRole("button", { name: "打开团队状态" }).click();
     await expect(page.getByRole("complementary", { name: "团队系统看板" })).toBeVisible();
     await expect(page.getByRole("group", { name: "代理会话列" })).toHaveCount(0);
     expect(await hasNoHorizontalOverflow(page)).toBe(true);
@@ -684,7 +697,7 @@ test.describe("Team Mode browser smoke", () => {
     await page.setViewportSize({ width: 1100, height: 800 });
     await expect(page.getByRole("complementary", { name: "团队检查器" })).toBeVisible();
     const teamRail = page.getByRole("complementary", { name: "团队侧栏" });
-    await expect(teamRail).toHaveCSS("width", "56px");
+    await expect(teamRail).toHaveCSS("width", "280px");
     await expect(teamRail.getByRole("link", { name: team.name })).toHaveAttribute("title", team.name);
     expect(await hasNoHorizontalOverflow(page)).toBe(true);
 
@@ -834,6 +847,39 @@ test.describe("Team Mode browser smoke", () => {
         path: path.join(process.env.HARNESS_TEAM_VISUAL_DIR, "web-columns.png"),
       });
     }
+  });
+
+  test("renames a team and task and keeps both names after refresh", async ({ page }) => {
+    const state = stateFixture();
+    await page.addInitScript(() => {
+      (window as unknown as { desktopApi?: unknown }).desktopApi = {};
+    });
+    await fulfillTeamApis(page, state);
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    await page.goto("/teams/team-1");
+    await expect(page.getByText("协作团队").first()).toBeVisible();
+
+    await page.getByRole("button", { name: "更多团队操作" }).click();
+    await page.getByRole("menuitem", { name: "重命名团队" }).click();
+    const teamDialog = page.getByRole("dialog", { name: "重命名团队" });
+    await teamDialog.getByLabel("团队名称").fill("玻璃协作团队");
+    await teamDialog.getByRole("button", { name: "保存名称" }).click();
+    await expect(page.getByText("玻璃协作团队").first()).toBeVisible();
+
+    await page.getByRole("button", { name: "任务板" }).click();
+    const taskBoard = page.getByRole("dialog", { name: "团队任务板" });
+    await taskBoard.getByRole("button", { name: "重命名任务" }).first().click();
+    const taskDialog = page.getByRole("dialog", { name: "重命名任务" });
+    await taskDialog.getByLabel("任务名称").fill("玻璃任务");
+    await taskDialog.getByRole("button", { name: "保存名称" }).click();
+    await expect(taskBoard.getByText("玻璃任务")).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByText("玻璃协作团队").first()).toBeVisible();
+    await page.getByRole("button", { name: "任务板" }).click();
+    await expect(page.getByRole("dialog", { name: "团队任务板" }).getByText("玻璃任务")).toBeVisible();
+    expect(await hasNoHorizontalOverflow(page)).toBe(true);
   });
 
   test("keeps the mobile layout single-column and sendable without overflow", async ({ page }) => {

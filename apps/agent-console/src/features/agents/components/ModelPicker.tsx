@@ -36,6 +36,7 @@ export type ModelOption = {
   providerLabel: string;
   modelId: string;
   modelLabel: string;
+  supportsReasoningEffort?: boolean;
 };
 
 export type ModelPickerProps = {

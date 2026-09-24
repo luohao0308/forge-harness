@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  ArrowLeft,
   Check,
   ChevronRight,
   CircleX,
@@ -10,11 +11,16 @@ import {
   RotateCw,
   Settings2,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
+import { ConsoleShell } from "../../../app/ConsoleShell";
+import { DesktopPageHeader } from "../../../components/desktop/DesktopPageHeader";
+import { useDesktopWorkspaceReturnPath } from "../../../components/desktop/useDesktopWorkspaceReturnPath";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { notifyFeedback } from "../../../components/ui/feedback-toast";
+import { isDesktopRuntime } from "../../../lib/desktop-bridge";
+import { normalizeWorkspacePath } from "../../../lib/desktop-navigation";
 import { cn, formatShortDate } from "../../../lib/utils";
 import {
   approveToolApproval,
@@ -61,10 +67,14 @@ const categoryLabels: Record<AttentionItem["category"], string> = {
 };
 
 export function AttentionCenterPage() {
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<AttentionFilter>("all");
   const [announcement, setAnnouncement] = useState("");
   const desktopAvailable = typeof window !== "undefined" && Boolean(window.desktopApi);
+  const desktop = isDesktopRuntime();
+  const desktopReturnPath = useDesktopWorkspaceReturnPath();
+  const returnPath = desktop ? desktopReturnPath : attentionReturnPath(location.search);
 
   const serverAttention = useQuery({
     queryKey: ["desktop", "attention"],
@@ -137,26 +147,58 @@ export function AttentionCenterPage() {
   }
 
   const refreshing = serverAttention.isFetching || localAttention.isFetching;
-
-  return (
-    <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
-      <header className="shrink-0 border-b border-slate-200 px-5 py-4 sm:px-7">
-        <div className="mx-auto flex w-full max-w-5xl items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold text-slate-950">待处理</h1>
-            <p className="mt-1 text-sm text-slate-600">审批、异常运行、团队阻塞与本地恢复项</p>
+  const page = (
+    <section className="glass-surface flex min-h-0 flex-1 flex-col overflow-hidden">
+      {desktop ? (
+        <DesktopPageHeader
+          title="待处理"
+          description="审批、异常运行、团队阻塞与本地恢复项"
+          icon={Inbox}
+          returnTo={returnPath}
+          actions={(
+            <Button
+              type="button"
+              variant="ghost"
+              aria-label="刷新待处理"
+              title="刷新待处理"
+              disabled={refreshing}
+              onClick={() => void refreshAll()}
+              className="h-8 w-8 px-0"
+            >
+              <RefreshCw aria-hidden="true" className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+            </Button>
+          )}
+        />
+      ) : (
+        <header className="shrink-0 border-b border-slate-200 px-5 py-4 sm:px-7">
+          <div className="mx-auto flex w-full max-w-5xl items-start justify-between gap-4">
+            <div className="flex min-w-0 items-start gap-3">
+              <Link
+                to={returnPath}
+                aria-label="返回工作台"
+                title="返回工作台"
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+              >
+                <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+                <span className="hidden sm:inline">返回工作台</span>
+              </Link>
+              <div className="min-w-0">
+                <h1 className="text-lg font-semibold text-slate-950">待处理</h1>
+                <p className="mt-1 text-sm text-slate-600">审批、异常运行、团队阻塞与本地恢复项</p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              aria-label="刷新待处理"
+              disabled={refreshing}
+              onClick={() => void refreshAll()}
+            >
+              <RefreshCw aria-hidden="true" className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+              刷新
+            </Button>
           </div>
-          <Button
-            type="button"
-            aria-label="刷新待处理"
-            disabled={refreshing}
-            onClick={() => void refreshAll()}
-          >
-            <RefreshCw aria-hidden="true" className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
-            刷新
-          </Button>
-        </div>
-      </header>
+        </header>
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-7">
         <div className="mx-auto w-full max-w-5xl">
@@ -248,6 +290,14 @@ export function AttentionCenterPage() {
       </div>
     </section>
   );
+
+  return desktop ? <ConsoleShell title="待处理">{page}</ConsoleShell> : page;
+}
+
+export function attentionReturnPath(search: string): string {
+  const fallback = "/agents/default/workspace";
+  const candidate = new URLSearchParams(search).get("return_to");
+  return normalizeWorkspacePath(candidate) ?? fallback;
 }
 
 function AttentionItemRow({

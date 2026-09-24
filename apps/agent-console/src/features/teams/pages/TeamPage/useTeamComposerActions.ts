@@ -4,6 +4,12 @@ import { useMutation, type UseMutationResult } from "@tanstack/react-query";
 import { feedbackErrorMessage, notifyFeedback } from "../../../../components/ui/feedback-toast";
 import type { ComposerAttachment } from "../../../agents/components/ChatComposer";
 import type { WorkspaceMode } from "../../../agents/lib/types";
+import {
+  DEFAULT_PERMISSION_MODE,
+  DEFAULT_REASONING_EFFORT,
+  type PermissionMode,
+  type ReasoningEffort,
+} from "../../../agents/lib/workspaceSettings";
 import { sendTeamMessage, type Team, type TeamAgent, type TeamMailboxMessage } from "../../../tasks/api";
 
 import {
@@ -87,6 +93,8 @@ export function useTeamComposerActions({
         type: "message",
         files: payload.files,
         mode: payload.mode,
+        reasoning_effort: payload.reasoningEffort,
+        permission_mode: payload.permissionMode,
       }),
     onSuccess: async (_message, variables) => {
       triggerWake(variables.recipientSlotIds);
@@ -129,6 +137,8 @@ export function useTeamComposerActions({
       target: string,
       attachments: ComposerAttachment[] = [],
       mode: WorkspaceMode = "chat",
+      reasoningEffort: ReasoningEffort = DEFAULT_REASONING_EFFORT,
+      permissionMode: PermissionMode = DEFAULT_PERMISSION_MODE,
       branchOptions?: BranchSendOptions,
     ) => {
       const trimmed = content.trim();
@@ -136,7 +146,15 @@ export function useTeamComposerActions({
       const recipientSlotIds = recipientSlotIdsForTarget(activeTeam, target);
       if (recipientSlotIds.length === 0) return;
       const files = attachments.map((attachment) => attachment.name);
-      const key = teamPendingSendKey(agent.slot_id, target, mode, trimmed, files);
+      const key = teamPendingSendKey(
+        agent.slot_id,
+        target,
+        mode,
+        trimmed,
+        files,
+        reasoningEffort,
+        permissionMode,
+      );
       const duplicate =
         pendingSendKeysRef.current.has(key) ||
         pendingSends.some(
@@ -145,7 +163,9 @@ export function useTeamComposerActions({
             send.target === target &&
             send.content === trimmed &&
             send.mode === mode &&
-            send.files.join("\n") === files.join("\n"),
+            send.files.join("\n") === files.join("\n") &&
+            send.reasoningEffort === reasoningEffort &&
+            send.permissionMode === permissionMode,
         );
       if (duplicate) return;
       pendingSendKeysRef.current.add(key);
@@ -161,6 +181,8 @@ export function useTeamComposerActions({
         content: trimmed,
         files,
         mode,
+        reasoningEffort,
+        permissionMode,
         recipientSlotIds,
         anchorUserId: branchOptions?.anchorUserId,
         branchAssistantId,
@@ -242,10 +264,19 @@ export function useTeamComposerActions({
       if (!previousUser) return;
       const originalAssistant = entries.find((entry) => entry.node.id === assistantNodeId);
       if (!originalAssistant) return;
-      sendFromComposer(agent, previousUser.node.content, previousUser.target, [], "chat", {
-        anchorUserId: previousUser.node.id,
-        originalAssistantId: originalAssistant.node.id,
-      });
+      sendFromComposer(
+        agent,
+        previousUser.node.content,
+        previousUser.target,
+        [],
+        "chat",
+        DEFAULT_REASONING_EFFORT,
+        DEFAULT_PERMISSION_MODE,
+        {
+          anchorUserId: previousUser.node.id,
+          originalAssistantId: originalAssistant.node.id,
+        },
+      );
     },
     [sendFromComposer],
   );

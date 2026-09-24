@@ -34,9 +34,9 @@ vi.mock('react-resizable-panels', () => ({
   Separator: () => <div data-testid="separator" />,
 }))
 
-function renderWorkspace() {
+function renderWorkspace(initialEntry = '/terminal') {
   return render(
-    <MemoryRouter initialEntries={['/terminal']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <TerminalWorkspace />
     </MemoryRouter>
   )
@@ -85,8 +85,14 @@ describe('TerminalWorkspace', () => {
   it('uses one terminal session in the desktop operation shell', () => {
     window.desktopApi = {}
 
-    renderWorkspace()
+    renderWorkspace('/terminal?return_to=%2Fagents%2Fresearch-agent%2Fworkspace%3Fconversation_id%3Dconv-7')
 
+    expect(screen.getByRole('heading', { name: '终端' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '返回工作台' })).toHaveAttribute(
+      'href',
+      '/agents/research-agent/workspace?conversation_id=conv-7',
+    )
+    expect(screen.getByRole('button', { name: '工作台工具' })).toBeInTheDocument()
     expect(screen.getByTestId('terminal-pane-term-1')).toBeInTheDocument()
     expect(screen.getByTestId('terminal-pane-term-1')).toHaveAttribute('data-appearance', 'integrated')
     expect(screen.queryByTestId('terminal-pane-term-2')).not.toBeInTheDocument()

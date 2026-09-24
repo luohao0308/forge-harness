@@ -73,6 +73,7 @@ export const consoleNavEntries = [
     label: "设置",
     iconKey: "settings",
     children: [
+      { to: "/settings", label: "设置概览", iconKey: "settings" },
       { to: "/settings/policies", label: "策略", iconKey: "shield" },
       { to: "/settings/models", label: "模型", iconKey: "brain" },
       { to: "/settings/secrets", label: "密钥库", iconKey: "key" },

@@ -60,8 +60,14 @@ export function upsertById<T>(items: T[], item: T, idOf: (value: T) => string) {
 
 export function timestampMs(value: string | null | undefined) {
   if (!value) return null;
-  const parsed = Date.parse(value);
+  const parsed = Date.parse(normalizeTeamTimestamp(value));
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function normalizeTeamTimestamp(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+  return /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed) ? trimmed : `${trimmed}Z`;
 }
 
 export function latestAssistantMessageMs(agent: TeamAgent) {
@@ -285,7 +291,26 @@ export function agentMessageFromMailbox(agent: TeamAgent, message: TeamMailboxMe
 }
 
 export function agentSessionMessages(agent: TeamAgent) {
-  return Array.isArray(agent.session_messages) ? agent.session_messages : [];
+  if (!Array.isArray(agent.session_messages)) return [];
+  return agent.session_messages
+    .map((message, index) => ({ message, index }))
+    .sort((left, right) => {
+      const leftMs = timestampMs(left.message.created_at);
+      const rightMs = timestampMs(right.message.created_at);
+      if (leftMs !== null && rightMs !== null && leftMs !== rightMs) return leftMs - rightMs;
+      const leftSequence = importedSourceSequence(left.message);
+      const rightSequence = importedSourceSequence(right.message);
+      if (leftSequence !== null && rightSequence !== null && leftSequence !== rightSequence) {
+        return leftSequence - rightSequence;
+      }
+      return left.index - right.index;
+    })
+    .map(({ message }) => message);
+}
+
+function importedSourceSequence(message: AgentMessage) {
+  const value = isRecord(message.metadata_json) ? message.metadata_json.source_sequence : null;
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
 }
 
 export function agentMessageMailboxId(message: AgentMessage) {

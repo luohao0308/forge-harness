@@ -26,6 +26,11 @@ const ObservabilityPage = lazy(() => import("../features/observability/pages/Obs
 const TokenSavingsPage = lazy(() => import("../features/observability/pages/TokenSavingsPage").then((module) => ({ default: module.TokenSavingsPage })));
 const TraceExplorerPage = lazy(() => import("../features/observability/pages/TraceExplorerPage").then((module) => ({ default: module.TraceExplorerPage })));
 const SandboxesPage = lazy(() => import("../features/sandboxes/pages/SandboxesPage").then((module) => ({ default: module.SandboxesPage })));
+const SettingsHubPage = lazy(() => import("../features/settings/pages/SettingsHubPage").then((module) => ({ default: module.SettingsHubPage })));
+const EnvironmentSettingsPage = lazy(() => import("../features/settings/pages/EnvironmentSettingsPage").then((module) => ({ default: module.EnvironmentSettingsPage })));
+const WorktreesSettingsPage = lazy(() => import("../features/settings/pages/WorktreesSettingsPage").then((module) => ({ default: module.WorktreesSettingsPage })));
+const IntegrationsSettingsPage = lazy(() => import("../features/settings/pages/IntegrationsSettingsPage").then((module) => ({ default: module.IntegrationsSettingsPage })));
+const VoiceSettingsPage = lazy(() => import("../features/settings/pages/VoiceSettingsPage").then((module) => ({ default: module.VoiceSettingsPage })));
 const AdvancedFeaturesPage = lazy(() => import("../features/settings/pages/AdvancedFeaturesPage").then((module) => ({ default: module.AdvancedFeaturesPage })));
 const DesktopSettingsRoutePage = lazy(() => import("../features/settings/pages/DesktopSettingsRoutePage").then((module) => ({ default: module.DesktopSettingsRoutePage })));
 const ApiKeysPage = lazy(() => import("../features/settings/pages/ApiKeysPage").then((module) => ({ default: module.ApiKeysPage })));
@@ -97,6 +102,11 @@ export const router = createConsoleRouter([
       { path: "evals", element: protectedElement(<EvalHarnessPage />) },
       { path: "help", element: protectedElement(<HelpCenterPage />) },
       { path: "help/troubleshooting", element: protectedElement(<HelpCenterPage />) },
+      { path: "settings", element: protectedElement(<SettingsHubPage />) },
+      { path: "settings/environment", element: protectedElement(<EnvironmentSettingsPage />) },
+      { path: "settings/worktrees", element: protectedElement(<WorktreesSettingsPage />) },
+      { path: "settings/integrations", element: protectedElement(<IntegrationsSettingsPage />) },
+      { path: "settings/voice", element: protectedElement(<VoiceSettingsPage />) },
       { path: "settings/models", element: protectedElement(<ModelSettingsPage />) },
       { path: "settings/advanced", element: protectedElement(<AdvancedFeaturesPage />) },
       { path: "settings/secrets", element: protectedElement(<SecretVaultPage />) },

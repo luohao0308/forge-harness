@@ -76,12 +76,12 @@ const serverAttention = {
   truncated: false,
 };
 
-function renderPage() {
+function renderPage(initialEntry = "/attention") {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
-    <MemoryRouter initialEntries={["/attention"]}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <QueryClientProvider client={queryClient}>
         <AttentionCenterPage />
       </QueryClientProvider>
@@ -106,6 +106,10 @@ describe("AttentionCenterPage", () => {
     renderPage();
 
     expect(screen.getByRole("heading", { name: "待处理" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "返回工作台" })).toHaveAttribute(
+      "href",
+      "/agents/default/workspace",
+    );
     expect(await screen.findByText("部署任务")).toBeInTheDocument();
     expect(screen.getByText("索引任务")).toBeInTheDocument();
     expect(screen.getByText("发布团队")).toBeInTheDocument();
@@ -114,6 +118,24 @@ describe("AttentionCenterPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "运行 1" }));
     expect(screen.queryByText("部署任务")).not.toBeInTheDocument();
     expect(screen.getByText("索引任务")).toBeInTheDocument();
+  });
+
+  it("returns to the source workspace and rejects external return targets", () => {
+    const { unmount } = renderPage(
+      "/attention?return_to=%2Fagents%2Fsupport-agent%2Fworkspace%3Fconversation_id%3Dconv-42",
+    );
+
+    expect(screen.getByRole("link", { name: "返回工作台" })).toHaveAttribute(
+      "href",
+      "/agents/support-agent/workspace?conversation_id=conv-42",
+    );
+
+    unmount();
+    renderPage("/attention?return_to=https%3A%2F%2Fevil.example%2Fsteal");
+    expect(screen.getByRole("link", { name: "返回工作台" })).toHaveAttribute(
+      "href",
+      "/agents/default/workspace",
+    );
   });
 
   it("approves and rejects from the queue, then refreshes the projection", async () => {

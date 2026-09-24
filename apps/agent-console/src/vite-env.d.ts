@@ -90,6 +90,13 @@ type LocalRuntimeModelConfigurationInput = {
   apiKey?: string;
 };
 
+type DesktopVoiceComponentStatus = {
+  state: "not-installed" | "installing" | "ready" | "error" | "unavailable";
+  modelId?: string | null;
+  engineVersion?: string | null;
+  message?: string | null;
+};
+
 type DesktopApi = {
   storage?: {
     getItem: (key: string) => string | null;
@@ -105,6 +112,18 @@ type DesktopApi = {
     renewSession?: () => Promise<void>;
     testModelConnection?: () => Promise<LocalRuntimeModelStatus>;
     openWebExtension?: () => Promise<void>;
+  };
+  voice?: {
+    getStatus?: () => Promise<DesktopVoiceComponentStatus>;
+    installDefaultModel?: () => Promise<DesktopVoiceComponentStatus>;
+    importPack?: () => Promise<DesktopVoiceComponentStatus>;
+    uninstall?: () => Promise<DesktopVoiceComponentStatus>;
+    transcribe?: (input: {
+      audio: Uint8Array;
+      language: "zh-CN" | "en-US" | "auto";
+      durationMs: number;
+    }) => Promise<{ text: string }>;
+    cancel?: () => Promise<void>;
   };
   system?: {
     showWindow?: (route?: string) => Promise<void>;
@@ -190,6 +209,13 @@ type DesktopApi = {
     getStatus?: () => Promise<DesktopChangeReviewStatus>;
     getDiff?: (path: string) => Promise<DesktopChangeDiff>;
     mutate?: (input: DesktopChangeMutationInput) => Promise<DesktopChangeMutationResult>;
+  };
+  gitWorktree?: {
+    getStatus?: () => Promise<DesktopWorktreeStatus>;
+    create?: (input: DesktopWorktreeCreateInput) => Promise<DesktopWorktreeMutationResult>;
+    switch?: (path: string) => Promise<DesktopWorktreeMutationResult>;
+    remove?: (path: string) => Promise<DesktopWorktreeMutationResult>;
+    prune?: () => Promise<DesktopWorktreeMutationResult>;
   };
 };
 
@@ -424,6 +450,40 @@ type DesktopChangeReviewStatus = {
   files: DesktopChangeFile[];
   errorCode: string | null;
   message: string | null;
+};
+
+type DesktopWorktreeState = "ready" | "no-workspace" | "not-repository" | "git-unavailable" | "error";
+
+type DesktopWorktree = {
+  path: string;
+  branch: string | null;
+  head: string | null;
+  current: boolean;
+  main: boolean;
+  dirty: boolean;
+  prunable: boolean;
+};
+
+type DesktopWorktreeStatus = {
+  state: DesktopWorktreeState;
+  branch: string | null;
+  worktrees: DesktopWorktree[];
+  errorCode: string | null;
+  message: string | null;
+};
+
+type DesktopWorktreeCreateInput = {
+  branch: string;
+  path?: string;
+};
+
+type DesktopWorktreeMutationResult = {
+  action: "create" | "switch" | "remove" | "prune";
+  status: "completed";
+  path: string | null;
+  auditId: string;
+  eventId: string | null;
+  operationId: string;
 };
 
 type DesktopChangeDiffHunk = {

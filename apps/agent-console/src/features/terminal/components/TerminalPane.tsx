@@ -36,7 +36,7 @@ export function TerminalPane({ id, appearance = 'panel' }: TerminalPaneProps) {
     <div
       data-appearance={appearance}
       className={cn(
-        'h-full w-full overflow-hidden border bg-white transition-[border-color,box-shadow]',
+        'glass-surface h-full w-full overflow-hidden border transition-[border-color,box-shadow]',
         isIntegrated
           ? 'rounded-md border-slate-200/80 shadow-[0_1px_2px_rgba(15,23,42,0.03)]'
           : 'rounded-lg border-[#E7E3DA]',

@@ -35,8 +35,8 @@ describe("enterprise route inventory", () => {
     const routerPaths = routePathsFromRouter();
 
     expect(consoleNavEntries).toHaveLength(13);
-    expect(sidebarRouteInventory).toHaveLength(24);
-    expect(new Set(sidebarRouteInventory.map((item) => item.href)).size).toBe(24);
+    expect(sidebarRouteInventory).toHaveLength(25);
+    expect(new Set(sidebarRouteInventory.map((item) => item.href)).size).toBe(25);
     for (const item of sidebarRouteInventory) {
       expect(staticConsoleRoutePaths).toContain(item.href);
       expect(routerPaths).toContain(item.href);

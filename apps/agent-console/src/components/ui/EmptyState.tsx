@@ -24,7 +24,7 @@ export function EmptyState({
   actions?: EmptyStateAction[];
 }) {
   return (
-    <div className="flex min-h-[180px] items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white p-6 text-center">
+    <div className="glass-surface flex min-h-[180px] items-center justify-center rounded-2xl border border-dashed border-ui-border/80 p-6 text-center">
       <div className="max-w-md">
         <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-md bg-slate-100 text-slate-500">
           {icon}

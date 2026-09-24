@@ -7,13 +7,15 @@ import {
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Loader2 } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { ConsoleShell } from "../../../../app/ConsoleShell";
 import { Button } from "../../../../components/ui/button";
 import { Card } from "../../../../components/ui/card";
+import { ConfigDialog } from "../../../../components/ui/config-dialog";
 import { feedbackErrorMessage, notifyFeedback } from "../../../../components/ui/feedback-toast";
 import { useConfirmDialog } from "../../../../components/ui/confirm-dialog";
+import { Input } from "../../../../components/ui/input";
 import { useI18n } from "../../../../lib/i18n";
 import type { ComposerAttachment } from "../../../agents/components/ChatComposer";
 import type { ConversationNode } from "../../../../stores/workspaceStore";
@@ -29,10 +31,13 @@ import {
   listTeams,
   renameTeamAgent,
   removeTeamAgent,
+  renameTeam,
+  updateTeamTask,
   updateTeamGoal,
   updateTeamAgent,
   type Team,
   type TeamAgent,
+  type TeamTask,
   type ToolMetadata,
 } from "../../../tasks/api";
 import { TeamRail, TeamRailMobileStrip } from "../../components/TeamRail";
@@ -91,6 +96,7 @@ export function TeamPage() {
   const { text } = useI18n();
   const { confirm, confirmDialog } = useConfirmDialog();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { teamId = "" } = useParams();
   const desktopTeamEnabled = typeof window !== "undefined" && "desktopApi" in window;
@@ -106,12 +112,14 @@ export function TeamPage() {
       : initialTeamWorkspaceView(teamId, desktopTeamEnabled);
   const [focusSlotId, setFocusSlotId] = useState<string | null>(null);
   const [focusPanel, setFocusPanel] = useState<"inspector" | "graph">("inspector");
+  const [overviewPanelOpen, setOverviewPanelOpen] = useState(false);
   const setWorkspaceView = useCallback(
     (view: TeamWorkspaceView) => {
       setWorkspaceViewState({ storageKey: workspaceViewStorageKey, view });
       if (view !== "collaboration") {
         setFocusSlotId(null);
         setFocusPanel("inspector");
+        setOverviewPanelOpen(false);
       }
     },
     [workspaceViewStorageKey],
@@ -155,6 +163,12 @@ export function TeamPage() {
   const [columnOverflow, setColumnOverflow] = useState({ left: false, right: false });
   const [goalEditorOpen, setGoalEditorOpen] = useState(false);
   const [goalDraft, setGoalDraft] = useState("");
+  const [teamRenameOpen, setTeamRenameOpen] = useState(false);
+  const [teamNameDraft, setTeamNameDraft] = useState("");
+  const [teamRenameError, setTeamRenameError] = useState<string | null>(null);
+  const [taskRenameId, setTaskRenameId] = useState<string | null>(null);
+  const [taskNameDraft, setTaskNameDraft] = useState("");
+  const [taskRenameError, setTaskRenameError] = useState<string | null>(null);
 
   useEffect(() => {
     setWorkspaceViewState((current) => {
@@ -254,6 +268,10 @@ export function TeamPage() {
   }, [activeTeam?.active_goal?.id, activeTeam?.active_goal?.objective]);
 
   useEffect(() => {
+    setOverviewPanelOpen(false);
+  }, [teamId]);
+
+  useEffect(() => {
     if (!addMemberOpen || newMemberAgentId || agentDefinitions.length === 0) return;
     setNewMemberAgentId(agentDefinitions.find((agent) => agent.id === "default")?.id ?? agentDefinitions[0].id);
   }, [addMemberOpen, agentDefinitions, newMemberAgentId]);
@@ -340,6 +358,100 @@ export function TeamPage() {
     await queryClient.invalidateQueries({ queryKey: ["teams", teamId] });
     await queryClient.invalidateQueries({ queryKey: ["teams"] });
   }, [queryClient, teamId]);
+
+  const renameTeamMutation = useMutation({
+    mutationFn: (name: string) => renameTeam(teamId, name),
+    onSuccess: async (updatedTeam) => {
+      setTeamRenameOpen(false);
+      setTeamNameDraft("");
+      setTeamRenameError(null);
+      queryClient.setQueryData<Team>(["teams", teamId], updatedTeam);
+      queryClient.setQueryData<TeamPageEnvelope>(["teams"], (current) =>
+        current
+          ? {
+              ...current,
+              items: current.items.map((item) => (item.id === updatedTeam.id ? updatedTeam : item)),
+            }
+          : current,
+      );
+      notifyFeedback({
+        tone: "success",
+        title: text("团队已重命名", "Team renamed"),
+        description: updatedTeam.name,
+      });
+      await invalidateTeamQueries();
+    },
+    onError: (error) => {
+      setTeamRenameError(feedbackErrorMessage(error, text("团队名称无效，请重试。", "Enter a valid team name.")));
+    },
+  });
+
+  const renameTaskMutation = useMutation({
+    mutationFn: (payload: { taskId: string; subject: string }) =>
+      updateTeamTask(teamId, payload.taskId, { subject: payload.subject }),
+    onSuccess: async (updatedTask) => {
+      setTaskRenameId(null);
+      setTaskNameDraft("");
+      setTaskRenameError(null);
+      queryClient.setQueryData<Team>(["teams", teamId], (current) =>
+        current
+          ? {
+              ...current,
+              tasks: current.tasks.map((task) => (task.id === updatedTask.id ? updatedTask : task)),
+            }
+          : current,
+      );
+      notifyFeedback({
+        tone: "success",
+        title: text("任务已重命名", "Task renamed"),
+        description: updatedTask.subject,
+      });
+      await invalidateTeamQueries();
+    },
+    onError: (error) => {
+      setTaskRenameError(feedbackErrorMessage(error, text("任务名称无效，请重试。", "Enter a valid task name.")));
+    },
+  });
+
+  const openTeamRename = useCallback(() => {
+    if (!activeTeam) return;
+    setTeamNameDraft(activeTeam.name);
+    setTeamRenameError(null);
+    setTeamRenameOpen(true);
+  }, [activeTeam]);
+
+  const openTaskRename = useCallback((task: TeamTask) => {
+    setTaskRenameId(task.id);
+    setTaskNameDraft(task.subject);
+    setTaskRenameError(null);
+  }, []);
+
+  const submitTeamRename = useCallback(() => {
+    const normalized = teamNameDraft.trim();
+    if (!normalized) {
+      setTeamRenameError(text("请输入团队名称。", "Enter a team name."));
+      return;
+    }
+    if (normalized.length > 120) {
+      setTeamRenameError(text("团队名称不能超过 120 个字符。", "Use 120 characters or fewer."));
+      return;
+    }
+    renameTeamMutation.mutate(normalized);
+  }, [renameTeamMutation, teamNameDraft, text]);
+
+  const submitTaskRename = useCallback(() => {
+    if (taskRenameId === null) return;
+    const normalized = taskNameDraft.trim();
+    if (!normalized) {
+      setTaskRenameError(text("请输入任务名称。", "Enter a task name."));
+      return;
+    }
+    if (normalized.length > 240) {
+      setTaskRenameError(text("任务名称不能超过 240 个字符。", "Use 240 characters or fewer."));
+      return;
+    }
+    renameTaskMutation.mutate({ taskId: taskRenameId, subject: normalized });
+  }, [renameTaskMutation, taskNameDraft, taskRenameId, text]);
 
   const patchGoalStatus = useCallback(
     async (nextStatus: "active" | "paused") => {
@@ -726,11 +838,16 @@ export function TeamPage() {
 
   return (
     <ConsoleShell title={activeTeam.name}>
-      <div className="flex h-[100vh] min-h-0 overflow-hidden bg-white">
-        <TeamRail teams={teams} activeTeamId={teamId} onCreate={() => setCreateOpen(true)} />
+      <div className="flex h-[100vh] min-h-0 overflow-hidden bg-ui-page">
+        <TeamRail
+          teams={teams}
+          activeTeamId={teamId}
+          onCreate={() => setCreateOpen(true)}
+          desktop={desktopTeamEnabled}
+        />
 
         <main className="flex min-w-0 flex-1 flex-col">
-          <TeamRailMobileStrip teams={teams} activeTeamId={teamId} />
+          <TeamRailMobileStrip teams={teams} activeTeamId={teamId} desktop={desktopTeamEnabled} />
           <TeamHeader
             activeTeam={activeTeam}
             agents={agents}
@@ -745,8 +862,14 @@ export function TeamPage() {
             onPauseGoal={() => void patchGoalStatus("paused")}
             onResumeGoal={() => void patchGoalStatus("active")}
             onEditGoal={() => setGoalEditorOpen(true)}
+            onRenameTeam={openTeamRename}
+            onRenameTask={openTaskRename}
             workspaceView={desktopTeamEnabled ? workspaceView : undefined}
             onWorkspaceViewChange={desktopTeamEnabled ? setWorkspaceView : undefined}
+            overviewPanelOpen={overviewPanelOpen}
+            onToggleOverviewPanel={desktopTeamEnabled && focusSlotId === null
+              ? () => setOverviewPanelOpen((open) => !open)
+              : undefined}
           />
 
           {!desktopTeamEnabled || workspaceView === "columns" || focusSlotId !== null ? (
@@ -790,6 +913,8 @@ export function TeamPage() {
             }}
             focusPanel={focusPanel}
             onFocusPanelChange={setFocusPanel}
+            overviewPanelOpen={overviewPanelOpen}
+            onCloseOverviewPanel={() => setOverviewPanelOpen(false)}
             columnListProps={{
               activeTeam,
               orderedAgents,
@@ -845,7 +970,7 @@ export function TeamPage() {
       <TeamCreateModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={(team) => navigate(`/teams/${team.id}`)}
+        onCreated={(team) => navigate({ pathname: `/teams/${team.id}`, search: location.search })}
       />
       <TeamAddMemberModal
         open={addMemberOpen}
@@ -882,6 +1007,94 @@ export function TeamPage() {
           onObjectiveChange={setGoalDraft}
           onSave={() => void saveGoalObjective()}
         />
+      ) : null}
+      {activeTeam && teamRenameOpen ? (
+        <ConfigDialog
+          open
+          title={text("重命名团队", "Rename team")}
+          description={text("更新团队在侧栏和任务上下文中的显示名称。", "Update the name shown in the team rail and task context.")}
+          onClose={() => {
+            setTeamRenameOpen(false);
+            setTeamRenameError(null);
+          }}
+          className="max-w-md"
+        >
+          <form
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitTeamRename();
+            }}
+          >
+            <label className="grid gap-1.5 text-xs">
+              <span className="font-medium text-ui-muted">{text("团队名称", "Team name")}</span>
+              <Input
+                autoFocus
+                value={teamNameDraft}
+                maxLength={120}
+                aria-label={text("团队名称", "Team name")}
+                aria-invalid={teamRenameError !== null}
+                onChange={(event) => {
+                  setTeamNameDraft(event.target.value);
+                  if (teamRenameError !== null) setTeamRenameError(null);
+                }}
+              />
+              {teamRenameError ? <span role="alert" className="text-xs text-red-600">{teamRenameError}</span> : null}
+            </label>
+            <div className="flex items-center justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={() => setTeamRenameOpen(false)}>
+                {text("取消", "Cancel")}
+              </Button>
+              <Button type="submit" variant="primary" disabled={renameTeamMutation.isPending}>
+                {text("保存名称", "Save name")}
+              </Button>
+            </div>
+          </form>
+        </ConfigDialog>
+      ) : null}
+      {activeTeam && taskRenameId !== null ? (
+        <ConfigDialog
+          open
+          title={text("重命名任务", "Rename task")}
+          description={text("更新任务板中的任务名称，任务状态和负责人不会改变。", "Rename this task without changing its status or owner.")}
+          onClose={() => {
+            setTaskRenameId(null);
+            setTaskRenameError(null);
+          }}
+          className="max-w-md"
+        >
+          <form
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitTaskRename();
+            }}
+          >
+            <label className="grid gap-1.5 text-xs">
+              <span className="font-medium text-ui-muted">{text("任务名称", "Task name")}</span>
+              <Input
+                autoFocus
+                value={taskNameDraft}
+                maxLength={240}
+                aria-label={text("任务名称", "Task name")}
+                aria-invalid={taskRenameError !== null}
+                onChange={(event) => {
+                  setTaskNameDraft(event.target.value);
+                  if (taskRenameError !== null) setTaskRenameError(null);
+                }}
+              />
+              {taskRenameError ? <span role="alert" className="text-xs text-red-600">{taskRenameError}</span> : null}
+            </label>
+            <div className="flex items-center justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={() => setTaskRenameId(null)}>
+                {text("取消", "Cancel")}
+              </Button>
+              <Button type="submit" variant="primary" disabled={renameTaskMutation.isPending}>
+                {text("保存名称", "Save name")}
+              </Button>
+            </div>
+          </form>
+        </ConfigDialog>
       ) : null}
     </ConsoleShell>
   );

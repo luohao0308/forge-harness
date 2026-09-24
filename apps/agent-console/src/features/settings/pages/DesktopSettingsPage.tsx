@@ -4,6 +4,7 @@ import {
   AppWindow,
   ArrowLeft,
   ChevronRight,
+  ChevronDown,
   Download,
   ExternalLink,
   FolderOpen,
@@ -22,6 +23,8 @@ import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { useConfirmDialog } from "../../../components/ui/confirm-dialog";
 import { Input } from "../../../components/ui/input";
+import { useDesktopWorkspaceReturnPath } from "../../../components/desktop/useDesktopWorkspaceReturnPath";
+import { desktopOperationPath } from "../../../lib/desktop-navigation";
 import { getDesktopLocalRuntimeApi } from "../../../lib/local-runtime";
 import { cn } from "../../../lib/utils";
 import { getLocalRuntimeModelStatus } from "../../tasks/api";
@@ -52,6 +55,7 @@ const SETTINGS_SECTIONS: Array<{
 
 export function DesktopSettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const returnTo = useDesktopWorkspaceReturnPath();
   const [query, setQuery] = useState("");
   const requestedSection = searchParams.get("section") as DesktopSettingsSection | null;
   const selectedSection = SETTINGS_SECTIONS.some((section) => section.id === requestedSection)
@@ -72,7 +76,7 @@ export function DesktopSettingsPage() {
     <div data-testid="desktop-settings-space" className="flex h-screen min-h-0 flex-col bg-slate-50/70 text-slate-800 md:grid md:grid-cols-[248px_minmax(0,1fr)]">
       <aside className="border-b border-slate-200 bg-white p-3 md:min-h-0 md:border-b-0 md:border-r">
           <Link
-            to="/agents/default/workspace"
+            to={returnTo}
             className="mb-3 inline-flex h-8 items-center gap-2 rounded-md px-2 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-950"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
@@ -96,7 +100,11 @@ export function DesktopSettingsPage() {
                 <button
                   key={section.id}
                   type="button"
-                  onClick={() => setSearchParams({ section: section.id })}
+                  onClick={() => {
+                    const nextSearchParams = new URLSearchParams(searchParams);
+                    nextSearchParams.set("section", section.id);
+                    setSearchParams(nextSearchParams);
+                  }}
                   className={cn(
                     "flex min-h-11 min-w-[150px] items-center gap-2 rounded-md px-2.5 text-left text-xs transition-colors md:min-w-0",
                     selected
@@ -220,6 +228,8 @@ function ModelAndKeySettings() {
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [models, setModels] = useState<string[]>([]);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const modelMenuRef = useRef<HTMLDivElement>(null);
   const [initialized, setInitialized] = useState(false);
   const baseUrlDirty = useRef(false);
   const modelDirty = useRef(false);
@@ -238,6 +248,21 @@ function ModelAndKeySettings() {
     if (!modelDirty.current) setModel(status.data.model);
     setInitialized(true);
   }, [initialized, status.data]);
+
+  useEffect(() => {
+    if (!modelMenuOpen) return;
+    const handlePointer = (event: MouseEvent | TouchEvent) => {
+      const element = modelMenuRef.current;
+      if (element && event.target instanceof Node && element.contains(event.target)) return;
+      setModelMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointer);
+    document.addEventListener("touchstart", handlePointer);
+    return () => {
+      document.removeEventListener("mousedown", handlePointer);
+      document.removeEventListener("touchstart", handlePointer);
+    };
+  }, [modelMenuOpen]);
 
   const discoverModels = async () => {
     if (!localRuntime?.discoverModels) throw new Error("MODEL_DISCOVERY_UNAVAILABLE");
@@ -360,20 +385,55 @@ function ModelAndKeySettings() {
         </SettingRow>
         <SettingRow title="默认模型" description="可直接输入模型 ID，或从远端模型列表选择。">
           <div className="flex w-full min-w-0 gap-2 sm:w-[min(52vw,520px)]">
-            <Input
-              aria-label="默认模型"
-              list="desktop-discovered-models"
-              value={model}
-              onChange={(event) => {
-                modelDirty.current = true;
-                setModel(event.target.value);
-              }}
-              placeholder="输入或选择模型"
-              className="min-w-0 flex-1 font-mono text-xs"
-            />
-            <datalist id="desktop-discovered-models">
-              {models.map((item) => <option key={item} value={item} />)}
-            </datalist>
+            <div ref={modelMenuRef} className="relative min-w-0 flex-1">
+              <Input
+                aria-label="默认模型"
+                list="desktop-discovered-models"
+                value={model}
+                onChange={(event) => {
+                  modelDirty.current = true;
+                  setModel(event.target.value);
+                }}
+                placeholder="输入或选择模型"
+                className="w-full pr-9 font-mono text-xs"
+              />
+              <button
+                type="button"
+                aria-label="打开模型列表"
+                aria-haspopup="listbox"
+                aria-expanded={modelMenuOpen}
+                disabled={discovering || save.isPending}
+                onClick={() => setModelMenuOpen((open) => !open)}
+                className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+              {modelMenuOpen ? (
+                <div role="listbox" aria-label="可用模型" className="absolute left-0 top-full z-30 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                  {models.length > 0 ? models.map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      role="option"
+                      aria-selected={item === model}
+                      onClick={() => {
+                        modelDirty.current = true;
+                        setModel(item);
+                        setModelMenuOpen(false);
+                      }}
+                      className={cn("flex w-full items-center rounded-lg px-2.5 py-2 text-left font-mono text-xs transition-colors", item === model ? "bg-slate-100 text-slate-950" : "text-slate-700 hover:bg-slate-50")}
+                    >
+                      {item}
+                    </button>
+                  )) : (
+                    <div className="px-2.5 py-2 text-xs text-slate-500">暂无模型，请先获取模型列表</div>
+                  )}
+                </div>
+              ) : null}
+              <datalist id="desktop-discovered-models">
+                {models.map((item) => <option key={item} value={item} />)}
+              </datalist>
+            </div>
             <Button
               type="button"
               variant="ghost"
@@ -610,8 +670,9 @@ function SettingRow({ title, description, children }: { title: string; descripti
 }
 
 function LinkSettingRow({ title, description, to }: { title: string; description: string; to: string }) {
+  const returnTo = useDesktopWorkspaceReturnPath();
   return (
-    <Link to={to} className="flex min-h-14 items-center justify-between gap-3 px-3 py-2.5 hover:bg-slate-50">
+    <Link to={desktopOperationPath(to, returnTo)} className="flex min-h-14 items-center justify-between gap-3 px-3 py-2.5 hover:bg-slate-50">
       <div className="min-w-0">
         <div className="text-xs font-medium text-slate-900">{title}</div>
         <div className="mt-0.5 text-[11px] leading-5 text-slate-500">{description}</div>

@@ -60,6 +60,29 @@ describe("workspace store workspace registry", () => {
     expect(useWorkspaceStore.getState().historyPanelCollapsed).toBe(true);
   });
 
+  it("persists normalized reasoning and permission settings per workspace", () => {
+    const store = useWorkspaceStore.getState();
+    store.registerWorkspace("ws-settings", "default");
+    store.switchWorkspace("ws-settings");
+
+    store.setReasoningEffort("xhigh");
+    store.setPermissionMode("auto-edit");
+
+    expect(useWorkspaceStore.getState().reasoningEffort).toBe("xhigh");
+    expect(useWorkspaceStore.getState().permissionMode).toBe("auto-edit");
+    expect(useWorkspaceStore.getState().workspaceRegistry["ws-settings"].config).toMatchObject({
+      reasoningEffort: "xhigh",
+      permissionMode: "auto-edit",
+    });
+
+    store.updateWorkspaceConfig("ws-settings", {
+      reasoningEffort: "unsupported" as never,
+      permissionMode: "unsupported" as never,
+    });
+    expect(useWorkspaceStore.getState().reasoningEffort).toBe("high");
+    expect(useWorkspaceStore.getState().permissionMode).toBe("confirm");
+  });
+
   it("resets only the conversation runtime and keeps the workspace registry intact", () => {
     const store = useWorkspaceStore.getState();
     store.registerWorkspace("ws-keep", "default");

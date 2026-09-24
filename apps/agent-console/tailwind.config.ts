@@ -5,8 +5,21 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        page: "#f7f8fa",
-        panel: "#ffffff",
+        page: "rgb(var(--ui-page) / <alpha-value>)",
+        panel: "rgb(var(--ui-surface) / <alpha-value>)",
+        ui: {
+          page: "rgb(var(--ui-page) / <alpha-value>)",
+          surface: "rgb(var(--ui-surface) / <alpha-value>)",
+          sidebar: "rgb(var(--ui-sidebar) / <alpha-value>)",
+          subtle: "rgb(var(--ui-subtle) / <alpha-value>)",
+          selected: "rgb(var(--ui-selected) / <alpha-value>)",
+          ink: "rgb(var(--ui-ink) / <alpha-value>)",
+          muted: "rgb(var(--ui-muted) / <alpha-value>)",
+          faint: "rgb(var(--ui-faint) / <alpha-value>)",
+          border: "rgb(var(--ui-border) / <alpha-value>)",
+          "border-strong": "rgb(var(--ui-border-strong) / <alpha-value>)",
+        },
+        glass: "var(--ui-glass-surface)",
         ink: {
           900: "#111827",
           700: "#374151",
@@ -15,6 +28,7 @@ const config: Config = {
       },
       boxShadow: {
         panel: "0 1px 2px rgba(16, 24, 40, 0.06)",
+        glass: "var(--ui-glass-shadow)",
       },
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui"],

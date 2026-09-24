@@ -43,6 +43,8 @@ export type ChatComposerProps = {
   onOptionsToggle?: () => void;
   optionsTriggerRef?: RefObject<HTMLButtonElement | null>;
   metadata?: ReactNode;
+  /** Rendered in the left side of the bottom action row. */
+  bottomLeft?: ReactNode;
   /** Rendered in the bottom action row, immediately beside the Send button. */
   bottomCenter?: ReactNode;
   containerClassName?: string;
@@ -136,6 +138,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(
       onOptionsToggle,
       optionsTriggerRef,
       metadata = null,
+      bottomLeft = null,
       bottomCenter = null,
       containerClassName,
       frameClassName,
@@ -328,7 +331,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(
         <div className={cn("mx-auto w-full max-w-3xl px-3 sm:px-4 lg:px-6", containerClassName)}>
           <div
             className={cn(
-              "relative rounded-[22px] border border-slate-200 bg-white px-3 py-2 shadow-[0_10px_28px_rgba(15,23,42,0.08)] focus-within:border-slate-300",
+              "relative rounded-[22px] border border-ui-border bg-ui-surface px-3 py-2 shadow-[0_8px_20px_rgba(36,36,40,0.06)] focus-within:border-ui-border-strong",
               frameClassName,
             )}
           >
@@ -366,7 +369,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(
                 maxHeight: `${MAX_COMPOSER_HEIGHT}px`,
                 lineHeight: "20px",
               }}
-              className="w-full resize-none overflow-hidden border-0 bg-transparent px-3 py-0.5 text-[15px] text-slate-800 outline-none placeholder:text-slate-400 focus:outline-none"
+              className="w-full resize-none overflow-hidden border-0 bg-transparent px-3 py-0.5 text-[15px] text-ui-ink outline-none placeholder:text-ui-faint focus:outline-none"
               autoFocus
             />
             <div className="mt-1.5 flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
@@ -380,7 +383,7 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(
                     aria-expanded={optionsOpen}
                     aria-label={text("打开输入设置", "Open composer settings")}
                     title={text("输入设置", "Composer settings")}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-ui-border bg-ui-surface text-ui-ink transition-colors hover:bg-ui-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong"
                   >
                     <SlidersHorizontal aria-hidden="true" className="h-3.5 w-3.5" />
                   </button>
@@ -393,15 +396,16 @@ export const ChatComposer = forwardRef<HTMLTextAreaElement, ChatComposerProps>(
                     aria-label={text("追求目标模式", "Goal pursuit mode")}
                     title={text("追求目标模式", "Goal pursuit mode")}
                     className={[
-                      "inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400",
+                      "inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong",
                       goalModeActive
-                        ? "border-slate-900 bg-slate-900 text-white"
-                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                        ? "border-ui-ink bg-ui-ink text-white"
+                        : "border-ui-border bg-ui-surface text-ui-ink hover:bg-ui-subtle",
                     ].join(" ")}
                   >
                     <Target aria-hidden="true" className="h-3.5 w-3.5" />
                   </button>
                 ) : null}
+                {bottomLeft}
               </div>
               <div
                 className={cn(
@@ -460,7 +464,7 @@ function AttachmentPreview({
   );
 
   return (
-    <div className="group relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+    <div className="group relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-ui-border bg-ui-subtle">
       {attachment.kind === "image" && attachment.previewUrl !== null ? (
         <img
           src={attachment.previewUrl}
@@ -468,16 +472,16 @@ function AttachmentPreview({
           className="h-full w-full object-cover"
         />
       ) : (
-        <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 px-1 text-slate-500">
+        <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 px-1 text-ui-muted">
           <FileText aria-hidden="true" className="h-4 w-4" />
-          <span className="max-w-full truncate text-[9px] leading-3 text-slate-600">
+          <span className="max-w-full truncate text-[9px] leading-3 text-ui-ink">
             {attachment.name}
           </span>
-          <span className="text-[8px] leading-3 text-slate-400">{sizeLabel}</span>
+          <span className="text-[8px] leading-3 text-ui-faint">{sizeLabel}</span>
         </div>
       )}
       <span
-        className="absolute bottom-1 left-1 max-w-[48px] truncate rounded-full bg-white/90 px-1 text-[8px] leading-3 text-slate-500 shadow-sm"
+        className="absolute bottom-1 left-1 max-w-[48px] truncate rounded-full bg-ui-surface/90 px-1 text-[8px] leading-3 text-ui-muted shadow-sm"
         title={statusLabel}
       >
         {statusLabel}
@@ -488,7 +492,7 @@ function AttachmentPreview({
           onClick={() => onRemove(attachment.id)}
           aria-label={removeLabel}
           title={removeLabel}
-          className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-950/75 text-white opacity-100 transition-colors hover:bg-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+          className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-ui-ink/75 text-white opacity-100 transition-colors hover:bg-ui-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
         >
           <X aria-hidden="true" className="h-3 w-3" />
         </button>

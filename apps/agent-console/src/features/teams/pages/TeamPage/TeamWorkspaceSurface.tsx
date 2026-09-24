@@ -7,6 +7,7 @@ import { cn } from "../../../../lib/utils";
 import { DesktopTeamInspector } from "./DesktopTeamInspector";
 import { DesktopTeamTaskGraph } from "./DesktopTeamTaskGraph";
 import { DesktopTeamOverview } from "./DesktopTeamOverview";
+import { DesktopTeamStatusPanel } from "./DesktopTeamStatusPanel";
 import type { TeamWorkspaceView } from "./DesktopTeamViewSwitch";
 import { displayAgentStatus } from "./teamState";
 import { TeamColumnList } from "./TeamColumnList";
@@ -94,6 +95,8 @@ export function TeamWorkspaceSurface({
   onExitFocus,
   focusPanel,
   onFocusPanelChange,
+  overviewPanelOpen,
+  onCloseOverviewPanel,
   columnListProps,
 }: {
   desktopEnabled: boolean;
@@ -105,6 +108,8 @@ export function TeamWorkspaceSurface({
   onExitFocus: () => void;
   focusPanel: "inspector" | "graph";
   onFocusPanelChange: (panel: "inspector" | "graph") => void;
+  overviewPanelOpen: boolean;
+  onCloseOverviewPanel: () => void;
   columnListProps: TeamColumnListProps;
 }) {
   const {
@@ -135,23 +140,37 @@ export function TeamWorkspaceSurface({
 
   const selectAgent = (slotId: string) => {
     onSelectAgent(slotId);
-    if (view === "collaboration" && focusSlotId === null) onEnterFocus(slotId);
+    if (view === "collaboration" && focusSlotId === null) {
+      onCloseOverviewPanel();
+      onEnterFocus(slotId);
+    }
   };
 
   if (view === "collaboration" && focusSlotId === null) {
     return (
-      <DesktopTeamOverview
-        team={activeTeam}
-        agents={orderedAgents}
-        tasks={tasks}
-        messages={messages}
-        activeSlotId={activeSlotId}
-        pendingWakeSlotIds={pendingWakeSlotIds}
-        streamingWakes={streamingWakes}
-        settledWakeCutoffs={settledWakeCutoffs}
-        text={text}
-        onSelectAgent={selectAgent}
-      />
+      <div className="relative h-full min-h-0 overflow-hidden">
+        <DesktopTeamOverview
+          team={activeTeam}
+          agents={orderedAgents}
+          tasks={tasks}
+          messages={messages}
+          activeSlotId={activeSlotId}
+          pendingWakeSlotIds={pendingWakeSlotIds}
+          streamingWakes={streamingWakes}
+          settledWakeCutoffs={settledWakeCutoffs}
+          text={text}
+          onSelectAgent={selectAgent}
+        />
+        {overviewPanelOpen ? (
+          <DesktopTeamStatusPanel
+            team={activeTeam}
+            agents={orderedAgents}
+            tasks={tasks}
+            text={text}
+            onClose={onCloseOverviewPanel}
+          />
+        ) : null}
+      </div>
     );
   }
 
