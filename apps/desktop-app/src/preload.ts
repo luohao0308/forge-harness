@@ -13,6 +13,12 @@ import type {
   DesktopChangeMutationInput,
   DesktopChangeMutationResult,
   DesktopChangeReviewStatus,
+  DesktopWorktreeCreateInput,
+  DesktopWorktreeMutationResult,
+  DesktopWorktreeStatus,
+  DesktopVoiceStatus,
+  DesktopVoiceTranscriptionInput,
+  DesktopVoiceTranscriptionResult,
   LocalAgentConversationBinding,
   LocalAgentSendMessagePayload,
   LocalAgentSendMessageResponse,
@@ -332,6 +338,35 @@ const desktopApi: DesktopApi = {
     mutate: (input: DesktopChangeMutationInput): Promise<DesktopChangeMutationResult> => {
       return ipcRenderer.invoke('change-review:mutate', input)
     },
+  },
+  gitWorktree: {
+    getStatus: (): Promise<DesktopWorktreeStatus> => {
+      return ipcRenderer.invoke('git-worktree:get-status')
+    },
+    create: (input: DesktopWorktreeCreateInput): Promise<DesktopWorktreeMutationResult> => {
+      return ipcRenderer.invoke('git-worktree:create', input)
+    },
+    switch: (path: string): Promise<DesktopWorktreeMutationResult> => {
+      return ipcRenderer.invoke('git-worktree:switch', path)
+    },
+    remove: (path: string): Promise<DesktopWorktreeMutationResult> => {
+      return ipcRenderer.invoke('git-worktree:remove', path)
+    },
+    prune: (): Promise<DesktopWorktreeMutationResult> => {
+      return ipcRenderer.invoke('git-worktree:prune')
+    },
+  },
+  voice: {
+    getStatus: (): Promise<DesktopVoiceStatus> => ipcRenderer.invoke('voice:get-status'),
+    installDefaultModel: (): Promise<DesktopVoiceStatus> => {
+      return ipcRenderer.invoke('voice:install-default-model')
+    },
+    importPack: (): Promise<DesktopVoiceStatus> => ipcRenderer.invoke('voice:import-pack'),
+    uninstall: (): Promise<DesktopVoiceStatus> => ipcRenderer.invoke('voice:uninstall'),
+    transcribe: (input: DesktopVoiceTranscriptionInput): Promise<DesktopVoiceTranscriptionResult> => {
+      return ipcRenderer.invoke('voice:transcribe', input)
+    },
+    cancel: (): Promise<boolean> => ipcRenderer.invoke('voice:cancel'),
   },
   events: {
     onMessageStream: (callback: (event: AgentEvent) => void): (() => void) => {

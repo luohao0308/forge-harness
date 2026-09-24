@@ -24,6 +24,7 @@ import type {
   DesktopOfflineAgentSnapshot,
 } from './offline-agent-types'
 import { getActiveProfileWorkspaceRoot, getLocalModelSettings } from './phase6-store'
+import { assertTrustedRendererSender } from './ipc-security'
 
 export type DesktopSyncRuntimeState =
   | 'idle'
@@ -133,37 +134,42 @@ export class DesktopOfflineSyncRuntime {
     if (this.registeredIpc) return
     this.registeredIpc = true
 
-    ipcMain.handle('sync:get-status', () => this.getStatus())
-    ipcMain.handle('sync:get-conflicts', () => this.getConflicts())
-    ipcMain.handle('sync:run-now', async () => this.runNow())
+    ipcMain.handle('sync:get-status', (event) => { assertTrustedRendererSender(event); return this.getStatus() })
+    ipcMain.handle('sync:get-conflicts', (event) => { assertTrustedRendererSender(event); return this.getConflicts() })
+    ipcMain.handle('sync:run-now', async (event) => { assertTrustedRendererSender(event); return this.runNow() })
     ipcMain.handle(
       'offline:promote-result-to-pending-agent-task',
-      (_event, offlineTaskId: string) => this.promoteOfflineResultToPendingAgentTask(offlineTaskId)
+      (event, offlineTaskId: string) => { assertTrustedRendererSender(event); return this.promoteOfflineResultToPendingAgentTask(offlineTaskId) }
     )
-    ipcMain.handle('offline-agent:list-runs', (_event, limit?: number) => ({
+    ipcMain.handle('offline-agent:list-runs', (event, limit?: number) => { assertTrustedRendererSender(event); return {
       items: this.requireOfflineAgentRuntime().listRuns(limit),
-    }))
-    ipcMain.handle('offline-agent:get-run', (_event, runId: string) => {
+    } })
+    ipcMain.handle('offline-agent:get-run', (event, runId: string) => {
+      assertTrustedRendererSender(event)
       return this.requireOfflineAgentRuntime().getRun(runId)
     })
-    ipcMain.handle('offline-agent:run', async (_event, input: DesktopOfflineAgentRunInput) => {
+    ipcMain.handle('offline-agent:run', async (event, input: DesktopOfflineAgentRunInput) => {
+      assertTrustedRendererSender(event)
       const run = await this.requireOfflineAgentRuntime().run(input)
       this.scheduleTerminalRunSync(run)
       return run
     })
-    ipcMain.handle('offline-agent:cancel', (_event, runId: string) => {
+    ipcMain.handle('offline-agent:cancel', (event, runId: string) => {
+      assertTrustedRendererSender(event)
       const run = this.requireOfflineAgentRuntime().cancel(runId)
       this.scheduleTerminalRunSync(run)
       return run
     })
-    ipcMain.handle('offline-agent:resume', async (_event, runId: string) => {
+    ipcMain.handle('offline-agent:resume', async (event, runId: string) => {
+      assertTrustedRendererSender(event)
       const run = await this.requireOfflineAgentRuntime().resume(runId)
       this.scheduleTerminalRunSync(run)
       return run
     })
     ipcMain.handle(
       'offline-agent:decide-approval',
-      async (_event, approvalId: string, approved: boolean) => {
+      async (event, approvalId: string, approved: boolean) => {
+        assertTrustedRendererSender(event)
         const run = await this.requireOfflineAgentRuntime().decideApproval(approvalId, approved)
         this.scheduleTerminalRunSync(run)
         return run

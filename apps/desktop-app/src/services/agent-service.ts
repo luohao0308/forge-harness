@@ -8,12 +8,13 @@ import type {
   LocalAgentConnection,
 } from '../preload-api'
 import { apiRequest, buildQueryString } from '../shared/api-client'
+import { assertTrustedRendererSender } from './ipc-security'
 
 export function registerAgentHandlers(): void {
   ipcMain.handle(
     'agent:bind-conversation',
     async (
-      _event,
+      event,
       connectionId: string,
       payload: {
         agent_session_id?: string | null
@@ -22,6 +23,7 @@ export function registerAgentHandlers(): void {
         resume_mode?: 'native_resume' | 'context_replay_new_session'
       } = {}
     ): Promise<LocalAgentConversationBinding> => {
+      assertTrustedRendererSender(event)
       return apiRequest<LocalAgentConversationBinding>(
         `/api/agents/local-agent/connections/${connectionId}/bindings`,
         {
@@ -35,10 +37,11 @@ export function registerAgentHandlers(): void {
   ipcMain.handle(
     'agent:send-message',
     async (
-      _event,
+      event,
       bindingId: string,
       payload: LocalAgentSendMessagePayload
     ): Promise<LocalAgentSendMessageResponse> => {
+      assertTrustedRendererSender(event)
       return apiRequest<LocalAgentSendMessageResponse>(
         `/api/agents/local-agent/bindings/${bindingId}/messages`,
         {
@@ -52,10 +55,11 @@ export function registerAgentHandlers(): void {
   ipcMain.handle(
     'agent:get-workspace',
     async (
-      _event,
+      event,
       runId: string,
       selectors: { retrieval_session_id?: string; prompt_manifest_id?: string } = {}
     ): Promise<AgentRunWorkspace> => {
+      assertTrustedRendererSender(event)
       const suffix = buildQueryString({
         retrieval_session_id: selectors.retrieval_session_id,
         prompt_manifest_id: selectors.prompt_manifest_id,
@@ -69,7 +73,8 @@ export function registerAgentHandlers(): void {
 
   ipcMain.handle(
     'agent:list-connections',
-    async (): Promise<{ items: LocalAgentConnection[] }> => {
+    async (event): Promise<{ items: LocalAgentConnection[] }> => {
+      assertTrustedRendererSender(event)
       return apiRequest<{ items: LocalAgentConnection[] }>(
         '/api/agents/local-agent/connections'
       )
@@ -78,7 +83,7 @@ export function registerAgentHandlers(): void {
 
   ipcMain.handle(
     'feedback:submit',
-    async (_event, payload: {
+    async (event, payload: {
       title: string
       description: string
       category?: 'bug' | 'idea' | 'praise' | 'support'
@@ -89,6 +94,7 @@ export function registerAgentHandlers(): void {
       screenshot_data_url?: string | null
       metadata?: Record<string, unknown>
     }) => {
+      assertTrustedRendererSender(event)
       return apiRequest('/api/desktop/feedback', {
         method: 'POST',
         body: JSON.stringify(redactSensitiveValue(payload)),
@@ -99,7 +105,7 @@ export function registerAgentHandlers(): void {
   ipcMain.handle(
     'feedback:record-metric',
     async (
-      _event,
+      event,
       payload: {
         metric_name: 'startup_time_ms' | 'crash_event' | 'sync_success' | 'sync_failure'
         channel?: 'stable' | 'beta'
@@ -109,6 +115,7 @@ export function registerAgentHandlers(): void {
         metadata?: Record<string, unknown>
       }
     ) => {
+      assertTrustedRendererSender(event)
       return apiRequest('/api/desktop/metrics', {
         method: 'POST',
         body: JSON.stringify(payload),
@@ -116,7 +123,8 @@ export function registerAgentHandlers(): void {
     }
   )
 
-  ipcMain.handle('feedback:get-metrics-summary', async () => {
+  ipcMain.handle('feedback:get-metrics-summary', async (event) => {
+    assertTrustedRendererSender(event)
     return apiRequest('/api/desktop/metrics/summary')
   })
 }

@@ -108,6 +108,64 @@ export type DesktopChangeMutationResult = {
   eventId: string | null
 }
 
+export type DesktopWorktreeState = 'ready' | 'no-workspace' | 'not-repository' | 'git-unavailable' | 'error'
+
+export type DesktopWorktree = {
+  path: string
+  branch: string | null
+  head: string | null
+  current: boolean
+  main: boolean
+  dirty: boolean
+  prunable: boolean
+}
+
+export type DesktopWorktreeStatus = {
+  state: DesktopWorktreeState
+  branch: string | null
+  worktrees: DesktopWorktree[]
+  errorCode: string | null
+  message: string | null
+}
+
+export type DesktopWorktreeCreateInput = {
+  branch: string
+  path?: string
+}
+
+export type DesktopWorktreeMutationAction = 'create' | 'switch' | 'remove' | 'prune'
+
+export type DesktopWorktreeMutationResult = {
+  action: DesktopWorktreeMutationAction
+  status: 'completed'
+  path: string | null
+  auditId: string
+  eventId: string | null
+  operationId: string
+}
+
+export type DesktopVoiceState = 'not-installed' | 'installing' | 'ready' | 'error' | 'unavailable'
+export type DesktopVoiceLanguage = 'zh-CN' | 'en-US' | 'auto'
+
+export type DesktopVoiceStatus = {
+  state: DesktopVoiceState
+  modelId?: string
+  engineVersion?: string
+  message?: string
+}
+
+export type DesktopVoiceTranscriptionInput = {
+  audio: Uint8Array
+  language: DesktopVoiceLanguage
+  durationMs: number
+}
+
+export type DesktopVoiceTranscriptionResult = {
+  text: string
+  modelId: string
+  durationMs: number
+}
+
 export type TaskStatus =
   | 'CREATED'
   | 'PLANNING'
@@ -645,6 +703,23 @@ export interface DesktopApi {
     getStatus: () => Promise<DesktopChangeReviewStatus>
     getDiff: (path: string) => Promise<DesktopChangeDiff>
     mutate: (input: DesktopChangeMutationInput) => Promise<DesktopChangeMutationResult>
+  }
+
+  gitWorktree: {
+    getStatus: () => Promise<DesktopWorktreeStatus>
+    create: (input: DesktopWorktreeCreateInput) => Promise<DesktopWorktreeMutationResult>
+    switch: (path: string) => Promise<DesktopWorktreeMutationResult>
+    remove: (path: string) => Promise<DesktopWorktreeMutationResult>
+    prune: () => Promise<DesktopWorktreeMutationResult>
+  }
+
+  voice: {
+    getStatus: () => Promise<DesktopVoiceStatus>
+    installDefaultModel: () => Promise<DesktopVoiceStatus>
+    importPack: () => Promise<DesktopVoiceStatus>
+    uninstall: () => Promise<DesktopVoiceStatus>
+    transcribe: (input: DesktopVoiceTranscriptionInput) => Promise<DesktopVoiceTranscriptionResult>
+    cancel: () => Promise<boolean>
   }
 
   // SSE event listeners

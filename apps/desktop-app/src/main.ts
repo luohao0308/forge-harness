@@ -7,6 +7,8 @@ import { recordDesktopStartupReport } from './services/desktop-telemetry'
 // import { checkForDesktopUpdates, registerDesktopUpdateHandlers } from './services/desktop-updates'
 import { registerFileHandlers } from './services/file-service'
 import { registerChangeReviewHandlers } from './services/change-review-service'
+import { registerGitWorktreeHandlers } from './services/git-worktree-service'
+import { registerVoiceComponentHandlers, setTrustedVoiceOrigin } from './services/voice-component-service'
 import { registerRendererWorkspaceStorageHandlers } from './services/renderer-workspace-storage'
 import { startDesktopOfflineSyncRuntime } from './services/offline-sync-runtime'
 import { registerPhase6Handlers } from './services/phase6-service'
@@ -94,6 +96,7 @@ if (ownsSingleInstance) app.whenReady().then(async () => {
       onEndpoint: async (endpoint) => {
         setLocalRuntimeBaseUrl(endpoint.origin)
         setTrustedRuntimeSecretOrigin(endpoint.origin)
+        setTrustedVoiceOrigin(endpoint.origin)
         if (!mainWindow || mainWindow.isDestroyed()) return
         await localRuntimeManager?.installDesktopSession(mainWindow.webContents.session)
         startupTracker.markDiagnostic('desktop_session_installed')
@@ -109,6 +112,7 @@ if (ownsSingleInstance) app.whenReady().then(async () => {
         console.error(`Harness local runtime unavailable: ${error.message}`)
         setLocalRuntimeBaseUrl(null)
         setTrustedRuntimeSecretOrigin(null)
+        setTrustedVoiceOrigin(null)
         void loadRecoveryRendererInAllWindows()
       },
     })
@@ -142,6 +146,8 @@ if (ownsSingleInstance) app.whenReady().then(async () => {
     },
   })
   registerChangeReviewHandlers()
+  registerGitWorktreeHandlers()
+  registerVoiceComponentHandlers()
   registerRendererWorkspaceStorageHandlers()
   registerPhase6Handlers()
   registerTaskHandlers()
@@ -260,6 +266,7 @@ app.on('before-quit', (event) => {
   localRuntimeManager = null
   setLocalRuntimeBaseUrl(null)
   setTrustedRuntimeSecretOrigin(null)
+  setTrustedVoiceOrigin(null)
   void runtime.stop().catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error)
     console.error(`Harness local runtime shutdown failed: ${message}`)

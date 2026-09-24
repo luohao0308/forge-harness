@@ -18,6 +18,10 @@ files:
   - package.json
 
 extraResources:
+  - from: resources/voice/${os}/${arch}
+    to: voice
+    filter:
+      - "**/*"
   - from: resources/runtime
     to: runtime
     filter:
@@ -46,6 +50,8 @@ mac:
   category: public.app-category.developer-tools
   hardenedRuntime: true
   gatekeeperAssess: false
+  extendInfo:
+    NSMicrophoneUsageDescription: Forge Harness 使用麦克风将语音转换为消息文本。原始音频不会上传，并会在转写完成后删除。
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   target:

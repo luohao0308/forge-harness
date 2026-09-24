@@ -18,6 +18,7 @@ import {
   setLocalModelSettings,
   upsertProfile,
 } from './phase6-store'
+import { assertTrustedRendererSender } from './ipc-security'
 
 let phase6HandlersRegistered = false
 const LOCAL_MODEL_TIMEOUT_MS = 10_000
@@ -31,16 +32,18 @@ export function registerPhase6Handlers(): void {
   if (phase6HandlersRegistered) return
   phase6HandlersRegistered = true
 
-  ipcMain.handle('profile:list', () => listProfiles())
+  ipcMain.handle('profile:list', (event) => { assertTrustedRendererSender(event); return listProfiles() })
 
   ipcMain.handle(
     'profile:save',
-    (_event, payload: DesktopProfileSaveInput): DesktopProfile => {
+    (event, payload: DesktopProfileSaveInput): DesktopProfile => {
+      assertTrustedRendererSender(event)
       return upsertProfile(payload)
     }
   )
 
   ipcMain.handle('profile:switch', (event, profileId: string): DesktopProfile => {
+    assertTrustedRendererSender(event)
     const profile = setActiveProfile(profileId)
     BrowserWindow.getAllWindows().forEach((window) => {
       window.webContents.send('profile:changed', profile)
@@ -49,13 +52,15 @@ export function registerPhase6Handlers(): void {
     return profile
   })
 
-  ipcMain.handle('local-model:get-settings', (): DesktopLocalModelSettings => {
+  ipcMain.handle('local-model:get-settings', (event): DesktopLocalModelSettings => {
+    assertTrustedRendererSender(event)
     return getLocalModelSettings()
   })
 
   ipcMain.handle(
     'local-model:set-settings',
-    (_event, payload: Partial<DesktopLocalModelSettings>): DesktopLocalModelSettings => {
+    (event, payload: Partial<DesktopLocalModelSettings>): DesktopLocalModelSettings => {
+      assertTrustedRendererSender(event)
       const current = getLocalModelSettings()
       const next = { ...current, ...payload }
       validateLocalModelSettings(next)
@@ -63,18 +68,21 @@ export function registerPhase6Handlers(): void {
     }
   )
 
-  ipcMain.handle('local-model:test-connection', async (): Promise<DesktopLocalModelHealth> => {
+  ipcMain.handle('local-model:test-connection', async (event): Promise<DesktopLocalModelHealth> => {
+    assertTrustedRendererSender(event)
     return testLocalModelConnection(getLocalModelSettings())
   })
 
   ipcMain.handle(
     'offline:run-simple-task',
-    async (_event, payload: { prompt: string; useLocalModel?: boolean }): Promise<DesktopOfflineTask> => {
+    async (event, payload: { prompt: string; useLocalModel?: boolean }): Promise<DesktopOfflineTask> => {
+      assertTrustedRendererSender(event)
       return runOfflineSimpleTask(payload.prompt, { useLocalModel: Boolean(payload.useLocalModel) })
     }
   )
 
-  ipcMain.handle('offline:list-tasks', (): { items: DesktopOfflineTask[] } => {
+  ipcMain.handle('offline:list-tasks', (event): { items: DesktopOfflineTask[] } => {
+    assertTrustedRendererSender(event)
     return { items: listOfflineTasks() }
   })
 }

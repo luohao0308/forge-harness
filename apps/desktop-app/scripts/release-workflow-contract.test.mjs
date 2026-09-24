@@ -6,6 +6,17 @@ import { fileURLToPath } from 'node:url'
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const workflowPath = path.resolve(appRoot, '..', '..', '.github', 'workflows', 'release.yml')
+const packagePath = path.join(appRoot, 'package.json')
+
+test('desktop packaging force-rebuilds native modules for the Electron ABI', async () => {
+  const packageJson = JSON.parse(await readFile(packagePath, 'utf8'))
+  const scripts = packageJson.scripts
+
+  assert.equal(scripts['rebuild:native:electron'], 'electron-rebuild -f -w better-sqlite3')
+  for (const scriptName of ['build', 'dist:mac', 'dist:win', 'dist:linux', 'package']) {
+    assert.match(scripts[scriptName], /npm run rebuild:native:electron/)
+  }
+})
 
 test('release waits for independently validated desktop startup evidence', async () => {
   const workflow = await readFile(workflowPath, 'utf8')

@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "engineVersion": "b4938",
+  "executable": "whisper-cli",
+  "sha256": "36ba87bc84fa1d61b9b4d2d282acd37d67f20be014aae7c5b21d014dba0e71e5",
+  "sourceArchiveSha256": "6d8d70a014ca2b10f8a6d006b8f423e5f5ef2afcfbe92b57ab4e01107238112a",
+  "minimumMacOSVersion": "13.3"
+}

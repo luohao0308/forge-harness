@@ -18,6 +18,7 @@
     "src/services/startup-performance.ts",
     "src/services/system-integration.ts",
     "src/services/task-service.ts",
+    "src/services/voice-component-service.ts",
     "src/services/window-manager.ts",
     "src/shared/**/*.ts",
     "src/stores/**/*.ts"

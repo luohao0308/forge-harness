@@ -6,6 +6,7 @@ import { attachWindowCrashReporting } from './crash-reporting'
 import { getActiveProfile, readWindowState, writeWindowState } from './phase6-store'
 import { PACKAGED_RENDERER_URL, RENDERER_HOST, RENDERER_SCHEME } from './renderer-protocol'
 import { getVerifiedRuntimeEndpoint } from './local-runtime'
+import { assertTrustedRendererSender } from './ipc-security'
 
 type WindowKind = 'main' | 'run'
 
@@ -183,16 +184,19 @@ export function registerDesktopWindowHandlers(): void {
   if (windowHandlersRegistered) return
   windowHandlersRegistered = true
 
-  ipcMain.handle('window:open-run', async (_event, runId: string) => {
+  ipcMain.handle('window:open-run', async (event, runId: string) => {
+    assertTrustedRendererSender(event)
     const window = await createHarnessWindow({ kind: 'run', runId })
     return summarizeWindow(window)
   })
 
-  ipcMain.handle('window:list', () => {
+  ipcMain.handle('window:list', (event) => {
+    assertTrustedRendererSender(event)
     return { items: listDesktopWindows() }
   })
 
-  ipcMain.handle('window:get-state', () => {
+  ipcMain.handle('window:get-state', (event) => {
+    assertTrustedRendererSender(event)
     const profile = getActiveProfile()
     return {
       profileId: profile.id,

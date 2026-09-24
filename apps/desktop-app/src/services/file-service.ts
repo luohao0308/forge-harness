@@ -242,7 +242,7 @@ export function getWindowWorkspaceState(window: BrowserWindow | null): DesktopFi
   return { rootPath: state.rootPath, watching: state.watching }
 }
 
-function setWindowWorkspaceRoot(window: BrowserWindow | null, rootPath: string | null): DesktopFileWatchState {
+export function setWindowWorkspaceRoot(window: BrowserWindow | null, rootPath: string | null): DesktopFileWatchState {
   if (!window) return { rootPath: null, watching: false }
   closeWindowWatcher(window)
   const profileId = getActiveProfile().id
