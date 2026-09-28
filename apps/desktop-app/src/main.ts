@@ -160,10 +160,18 @@ if (ownsSingleInstance) app.whenReady().then(async () => {
     createMainWindow,
   })
 
-  // Dynamically import desktop-updates to avoid module-level app.getVersion() call
-  const { registerDesktopUpdateHandlers, checkForDesktopUpdates } = await import('./services/desktop-updates')
-  registerDesktopUpdateHandlers({
-    getMainWindow: () => mainWindow,
+  // Dynamically import desktop-updates off the startup critical path: the
+  // module graph is only needed for update checks, never for first paint.
+  const desktopUpdatesReady = import('./services/desktop-updates').then((module) => {
+    module.registerDesktopUpdateHandlers({
+      getMainWindow: () => mainWindow,
+    })
+    return module
+  })
+  desktopUpdatesReady.catch((error: unknown) => {
+    console.warn(`Forge Harness Desktop update handlers failed to register: ${
+      error instanceof Error ? error.message : String(error)
+    }`)
   })
 
   startupTracker.mark('services_ready')
@@ -234,7 +242,7 @@ if (ownsSingleInstance) app.whenReady().then(async () => {
         console.warn(`Forge Harness Desktop startup telemetry failed: ${message}`)
   })
   if (app.isPackaged) {
-    void checkForDesktopUpdates()
+    void desktopUpdatesReady.then(({ checkForDesktopUpdates }) => checkForDesktopUpdates())
   }
 
   app.on('activate', () => {

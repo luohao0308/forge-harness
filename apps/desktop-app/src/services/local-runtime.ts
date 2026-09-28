@@ -178,6 +178,8 @@ export class LocalRuntimeManager {
   private restartTimer: ReturnType<typeof setTimeout> | null = null
   private secrets: LocalRuntimeBootstrapSecrets | null = null
   private expectedRuntime: { version: string; checksum: string } | null = null
+  private integrityCheck: Promise<void> | null = null
+  private integrityError: Error | null = null
   private desktopCookieSession: Electron.Session | null = null
   private desktopSessionRenewalTimer: ReturnType<typeof setTimeout> | null = null
   private desktopSessionGeneration = 0
@@ -214,15 +216,28 @@ export class LocalRuntimeManager {
   async start(): Promise<LocalRuntimeEndpoint> {
     this.stopping = false
     this.restartCount = 0
-    this.expectedRuntime = this.options.skipRuntimeVerification || process.env.HARNESSD_DEV_EXECUTABLE
-      ? null
-      : verifyPackagedRuntime(this.paths)
+    this.integrityError = null
+    if (this.options.skipRuntimeVerification || process.env.HARNESSD_DEV_EXECUTABLE) {
+      this.expectedRuntime = null
+      this.integrityCheck = null
+    } else {
+      const identity = verifyPackagedRuntimeIdentity(this.paths)
+      this.expectedRuntime = { version: identity.version, checksum: identity.checksum }
+      // The full onedir tree hash runs while the sidecar boots; startChild gates
+      // endpoint trust on it. Schema v1 manifests only cover the executable,
+      // which the identity phase already verified.
+      this.integrityCheck = identity.schema_version === 2
+        ? verifyPackagedRuntimeTree(this.paths, identity.manifest)
+        : null
+      this.integrityCheck?.catch(() => undefined)
+    }
     let lastError: Error | null = null
     for (let attempt = 0; attempt <= this.options.maxRestarts; attempt += 1) {
       try {
         return await this.startChild()
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error))
+        if (this.integrityError) break
         if (attempt >= this.options.maxRestarts || this.stopping) break
         await delay(this.options.initialBackoffMs * (2 ** attempt))
       }
@@ -400,15 +415,21 @@ export class LocalRuntimeManager {
     child.stderr.setEncoding('utf8')
     child.stderr.on('data', stderrTail.append)
     this.child = child
-    const endpointPromise = this.waitForReady(child, stderrTail)
-    child.stdin.end(`${JSON.stringify({
-      protocol_version: 1,
-      runtime_data_dir: this.paths.runtimeDataDir,
-      ...this.secrets,
-    })}\n`)
+    const ready = this.waitForReady(child, stderrTail)
+    const integrityPromise = this.assertRuntimeIntegrity()
+    if (!child.stdin.writableEnded) {
+      child.stdin.end(`${JSON.stringify({
+        protocol_version: 1,
+        runtime_data_dir: this.paths.runtimeDataDir,
+        ...this.secrets,
+      })}\n`)
+    }
 
     try {
-      const endpoint = await endpointPromise
+      // Endpoint trust is granted only after BOTH the ready handshake and the
+      // full runtime tree integrity check succeed; either failing first aborts
+      // the child immediately.
+      const [endpoint] = await Promise.all([ready.promise, integrityPromise])
       this.assertRuntimeIdentity(endpoint)
       await this.pollHealth(endpoint, child)
       this.emitStartupDiagnostic('sidecar_ready')
@@ -419,6 +440,7 @@ export class LocalRuntimeManager {
     } catch (error) {
       clearVerifiedRuntimeEndpoint()
       if (this.child === child) this.child = null
+      ready.dispose()
       await terminateChild(child, this.options.shutdownTimeoutMs)
       throw error
     }
@@ -432,15 +454,19 @@ export class LocalRuntimeManager {
     }
   }
 
-  private waitForReady(child: ChildProcessWithoutNullStreams, stderrTail: StderrTail): Promise<LocalRuntimeEndpoint> {
-    return new Promise((resolve, reject) => {
+  private waitForReady(child: ChildProcessWithoutNullStreams, stderrTail: StderrTail): {
+    promise: Promise<LocalRuntimeEndpoint>
+    dispose: () => void
+  } {
+    let finish!: (error?: Error, endpoint?: LocalRuntimeEndpoint) => void
+    const promise = new Promise<LocalRuntimeEndpoint>((resolve, reject) => {
       let stdoutBuffer = ''
       let readySeen = false
       const timeout = setTimeout(
         () => finish(new Error(`harnessd ready handshake timed out: ${stderrTail.excerpt() || 'no stderr output'}`)),
         this.options.startupTimeoutMs,
       )
-      const finish = (error?: Error, endpoint?: LocalRuntimeEndpoint) => {
+      finish = (error?: Error, endpoint?: LocalRuntimeEndpoint) => {
         clearTimeout(timeout)
         child.stdout.off('data', onData)
         child.stdout.resume()
@@ -477,6 +503,12 @@ export class LocalRuntimeManager {
       child.once('error', onError)
       child.once('exit', onEarlyExit)
     })
+    return {
+      promise,
+      // Aborts a handshake that lost the race (e.g. integrity failure) so its
+      // timeout timer cannot keep the process alive for the full budget.
+      dispose: () => finish(),
+    }
   }
 
   private async pollHealth(endpoint: LocalRuntimeEndpoint, child: ChildProcessWithoutNullStreams): Promise<void> {
@@ -597,6 +629,19 @@ export class LocalRuntimeManager {
       throw new Error('harnessd ready version does not match the packaged runtime manifest')
     }
   }
+
+  private async assertRuntimeIntegrity(): Promise<void> {
+    const check = this.integrityCheck
+    if (!check) return
+    try {
+      await check
+    } catch (error) {
+      if (!this.integrityError) {
+        this.integrityError = error instanceof Error ? error : new Error(String(error))
+      }
+      throw this.integrityError
+    }
+  }
 }
 
 function validateModelStatus(value: unknown): LocalRuntimeModelStatus {
@@ -711,7 +756,7 @@ function assertExecutable(executablePath: string): void {
   if (!fs.existsSync(executablePath)) throw new Error(`packaged harnessd is missing: ${executablePath}`)
 }
 
-function verifyPackagedRuntime(paths: LocalRuntimePaths): { version: string; checksum: string } {
+function verifyPackagedRuntimeIdentity(paths: LocalRuntimePaths): { version: string; checksum: string; schema_version: 1 | 2; manifest: Record<string, unknown> } {
   const manifestPath = path.join(paths.runtimeRoot, 'runtime-manifest.json')
   let manifest: unknown
   try {
@@ -730,11 +775,50 @@ function verifyPackagedRuntime(paths: LocalRuntimePaths): { version: string; che
     || !/^[a-f0-9]{64}$/.test(manifest.sha256)) {
     throw new Error('packaged harnessd manifest schema is invalid')
   }
-  const checksum = manifest.schema_version === 2
-    ? verifyRuntimeTree(paths.runtimeRoot, manifest, manifestPath)
-    : hashFile(paths.executablePath)
-  if (checksum !== manifest.sha256) throw new Error('packaged harnessd checksum verification failed')
-  return { version: manifest.runtime_version, checksum }
+  // Pre-spawn phase: validate the manifest and the executable only. The full
+  // onedir tree hash runs concurrently with the sidecar boot and gates the
+  // endpoint trust boundary inside startChild.
+  if (hashFile(paths.executablePath) !== manifest.sha256) {
+    throw new Error('packaged harnessd checksum verification failed')
+  }
+  return {
+    version: manifest.runtime_version,
+    checksum: manifest.sha256,
+    schema_version: manifest.schema_version as 1 | 2,
+    manifest,
+  }
+}
+
+async function verifyPackagedRuntimeTree(paths: LocalRuntimePaths, manifest: Record<string, unknown>): Promise<void> {
+  if (!isRecord(manifest.files)) throw new Error('packaged harnessd manifest schema is invalid')
+  const expected = new Map<string, string>()
+  for (const [relativePath, checksum] of Object.entries(manifest.files)) {
+    if (typeof checksum !== 'string' || !/^[a-f0-9]{64}$/.test(checksum)) {
+      throw new Error('packaged harnessd manifest schema is invalid')
+    }
+    resolveRuntimePath(paths.runtimeRoot, relativePath)
+    expected.set(relativePath, checksum)
+  }
+  if (typeof manifest.executable !== 'string'
+    || expected.get(manifest.executable) !== manifest.sha256) {
+    throw new Error('packaged harnessd manifest schema is invalid')
+  }
+
+  const manifestPath = path.join(paths.runtimeRoot, 'runtime-manifest.json')
+  const actual = listRuntimeFiles(paths.runtimeRoot, manifestPath)
+  for (const relativePath of expected.keys()) {
+    if (!actual.has(relativePath)) throw new Error(`packaged harnessd file is missing: ${relativePath}`)
+  }
+  for (const relativePath of actual) {
+    if (!expected.has(relativePath)) throw new Error(`packaged harnessd file is not in the manifest: ${relativePath}`)
+  }
+  for (const [relativePath, checksum] of expected) {
+    const fileBuffer = await fs.promises.readFile(resolveRuntimePath(paths.runtimeRoot, relativePath))
+    const actualChecksum = createHash('sha256').update(fileBuffer).digest('hex')
+    if (actualChecksum !== checksum) {
+      throw new Error(`packaged harnessd checksum verification failed: ${relativePath}`)
+    }
+  }
 }
 
 function resolveManifestExecutable(runtimeRoot: string, fallbackName: string): string {
@@ -755,39 +839,6 @@ function resolveConfiguredRuntimeRoot(executablePath: string): string {
   const candidates = [executableDirectory, path.dirname(executableDirectory)]
   return candidates.find((candidate) => fs.existsSync(path.join(candidate, 'runtime-manifest.json')))
     || executableDirectory
-}
-
-function verifyRuntimeTree(runtimeRoot: string, manifest: Record<string, unknown>, manifestPath: string): string {
-  if (!isRecord(manifest.files)) throw new Error('packaged harnessd manifest schema is invalid')
-  const expected = new Map<string, string>()
-  for (const [relativePath, checksum] of Object.entries(manifest.files)) {
-    if (typeof checksum !== 'string' || !/^[a-f0-9]{64}$/.test(checksum)) {
-      throw new Error('packaged harnessd manifest schema is invalid')
-    }
-    resolveRuntimePath(runtimeRoot, relativePath)
-    expected.set(relativePath, checksum)
-  }
-  if (typeof manifest.executable !== 'string'
-    || expected.get(manifest.executable) !== manifest.sha256) {
-    throw new Error('packaged harnessd manifest schema is invalid')
-  }
-
-  const actual = listRuntimeFiles(runtimeRoot, manifestPath)
-  for (const relativePath of expected.keys()) {
-    if (!actual.has(relativePath)) throw new Error(`packaged harnessd file is missing: ${relativePath}`)
-  }
-  for (const relativePath of actual) {
-    if (!expected.has(relativePath)) throw new Error(`packaged harnessd file is not in the manifest: ${relativePath}`)
-  }
-  let executableChecksum = ''
-  for (const [relativePath, checksum] of expected) {
-    const actualChecksum = hashFile(resolveRuntimePath(runtimeRoot, relativePath))
-    if (actualChecksum !== checksum) {
-      throw new Error(`packaged harnessd checksum verification failed: ${relativePath}`)
-    }
-    if (relativePath === manifest.executable) executableChecksum = actualChecksum
-  }
-  return executableChecksum
 }
 
 function listRuntimeFiles(runtimeRoot: string, manifestPath: string): Set<string> {

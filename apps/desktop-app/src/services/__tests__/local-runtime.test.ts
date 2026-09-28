@@ -499,6 +499,52 @@ describe('managed local harnessd runtime', () => {
     await expect(manager.start()).rejects.toThrow('file is missing')
   })
 
+  test('gates endpoint trust on the deferred v2 tree check without retrying tampered runtimes', async () => {
+    const resourcesPath = path.join(root, 'resources')
+    const runtimeRoot = path.join(resourcesPath, 'runtime', process.platform, process.arch)
+    const nestedExecutable = path.join(runtimeRoot, 'harnessd', process.platform === 'win32' ? 'harnessd.exe' : 'harnessd')
+    const libraryPath = path.join(runtimeRoot, 'harnessd', 'runtime-library.bin')
+    fs.mkdirSync(path.dirname(nestedExecutable), { recursive: true })
+    fs.writeFileSync(nestedExecutable, 'onedir runtime')
+    fs.writeFileSync(libraryPath, 'runtime library')
+    writeV2Manifest(runtimeRoot, nestedExecutable, [nestedExecutable, libraryPath])
+
+    const children: FakeChild[] = []
+    const spawnRuntime = vi.fn(() => {
+      const child = fakeChild()
+      children.push(child)
+      setTimeout(() => child.stdout.write(`${JSON.stringify(readyHandshake())}\n`), 0)
+      return child
+    })
+    const onEndpoint = vi.fn()
+    const { LocalRuntimeManager } = await import('../local-runtime')
+    const manager = new LocalRuntimeManager({
+      userDataPath: root,
+      resourcesPath,
+      spawnRuntime: spawnRuntime as never,
+      fetchRuntime: vi.fn(() => Promise.resolve(jsonResponse(200, { runtime_ready: true }))),
+      createSecrets: () => ({
+        session_signing_secret: 'session',
+        vault_encryption_secret: 'vault',
+        desktop_bootstrap_token: 'desktop',
+        persistent_secret_storage: true,
+      }),
+      initialBackoffMs: 5,
+      maxRestarts: 3,
+      startupTimeoutMs: 1_000,
+      shutdownTimeoutMs: 10,
+      onEndpoint,
+    })
+
+    // The executable stays valid so the pre-spawn identity check passes while a
+    // support file is corrupt: the deferred tree check must still refuse trust.
+    fs.writeFileSync(libraryPath, 'tampered library')
+    await expect(manager.start()).rejects.toThrow('checksum verification failed: harnessd/runtime-library.bin')
+    expect(spawnRuntime).toHaveBeenCalledTimes(1)
+    expect(onEndpoint).not.toHaveBeenCalled()
+    expect(children[0].kill).toHaveBeenCalledWith('SIGTERM')
+  })
+
   test('unpackaged runtime resolution falls back to the project resources tree and bundled renderer', async () => {
     const previousStaticDir = process.env.HARNESSD_STATIC_DIR
     const previousDevExecutable = process.env.HARNESSD_DEV_EXECUTABLE
@@ -586,7 +632,19 @@ describe('managed local harnessd runtime', () => {
     fs.writeFileSync(nestedExecutable, 'onedir runtime')
     fs.symlinkSync(nestedExecutable, path.join(runtimeRoot, 'harnessd', 'linked-runtime'))
     writeV2Manifest(runtimeRoot, nestedExecutable, [nestedExecutable])
-    const manager = new LocalRuntimeManager({ userDataPath: root, resourcesPath, maxRestarts: 0 })
+    const child = fakeChild()
+    child.kill = vi.fn(() => {
+      child.exitCode = 0
+      queueMicrotask(() => child.emit('exit', 0, null))
+      return true
+    })
+    const manager = new LocalRuntimeManager({
+      userDataPath: root,
+      resourcesPath,
+      maxRestarts: 0,
+      shutdownTimeoutMs: 10,
+      spawnRuntime: vi.fn(() => child) as never,
+    })
     await expect(manager.start()).rejects.toThrow('symlink is not allowed')
   })
 })
