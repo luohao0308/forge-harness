@@ -86,7 +86,7 @@ The desktop Team presentation and screenshot contract is documented in
 `docs/design/desktop/team-mode-workspace.md`.
 
 Start the backend and Console through
-`docs/project-memory/runbooks/local-development.md`, then launch Electron:
+`docs/operations/runbooks/local-development.md`, then launch Electron:
 
 ```bash
 cd apps/agent-console
@@ -282,7 +282,7 @@ DESKTOP_UPDATE_RELEASE_BASE_URL
 DESKTOP_UPDATE_NOTES
 ```
 
-See `docs/project-memory/runbooks/release.md` for the release script and signing secret names.
+See `docs/operations/runbooks/release.md` for the release script and signing secret names.
 
 ## Privacy And Security
 

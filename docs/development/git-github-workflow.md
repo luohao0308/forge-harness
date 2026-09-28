@@ -174,7 +174,7 @@ git push origin v0.1.1
 
 Hotfix 从 `origin/main` 创建 `hotfix/*`，运行定向回归和完整适用门禁，通过 PR squash 回 `main`，再按需要补 patch tag。无需再手工同步到 `develop`。
 
-完整发布、Canary、Desktop 签名/更新和回滚步骤见 `docs/project-memory/runbooks/release.md`。
+完整发布、Canary、Desktop 签名/更新和回滚步骤见 `docs/operations/runbooks/release.md`。
 
 ## 9. 本地策略安装与测试
 

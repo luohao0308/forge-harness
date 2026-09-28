@@ -32,7 +32,7 @@ _状态：active | 更新：2026-08-10_
 | lint/format | `ruff check app tests`；Console `npm run lint -- --pretty false` | API/Console | CI 同步执行 |
 | 类型/静态检查 | Console `npm run lint`；Desktop `npm run type-check`；`python3 -m py_compile <script>` | 客户端/脚本 | 变更入口对应执行 |
 | 构建/打包 | Console `npm run build`；Desktop `npm run build`；Website `npm run build` | 各前端目录 | 产物身份使用 commit/tag |
-| 数据迁移 | `alembic upgrade head`、`scripts/check-migration-ids.py` | API | 先备份/恢复演练，见 `docs/project-memory/runbooks/migrations.md` |
+| 数据迁移 | `alembic upgrade head`、`scripts/check-migration-ids.py` | API | 先备份/恢复演练，见 `docs/operations/runbooks/migrations.md` |
 | CI | `.github/workflows/pr-check.yml`、`backend.yml`、`frontend.yml`、`docs.yml`、`docker.yml`、`main-build.yml` | 根目录 | 以目标 workflow 的 required gates 为准 |
 
 ## Git 与隔离策略

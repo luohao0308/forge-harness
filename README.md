@@ -68,7 +68,7 @@ admin variables after the first successful login. Keep `AUTH_JWT_SECRET` and
 `HARNESS_SECRET_ENCRYPTION_KEY` stable; they protect sessions and stored
 integration secrets.
 
-The [first-run admin runbook](docs/project-memory/runbooks/first-run-admin.md)
+The [first-run admin runbook](docs/operations/runbooks/first-run-admin.md)
 covers login, smoke-test tokens, and the local admin fallback.
 
 ## Console Surfaces
@@ -148,7 +148,7 @@ forge-harness/
 - [Benchmark](docs/testing/benchmark-spec.md)
 - [Portfolio demo](docs/design/portfolio-demo-spec.md)
 - [API reference](docs/contracts/api-reference/README.md)
-- [Deployment runbook](docs/project-memory/runbooks/deployment.md)
+- [Deployment runbook](docs/operations/runbooks/deployment.md)
 - [Current tasks](docs/TASKS.md)
 - [AI startup context](docs/development/ai/agent-startup-context.md)
 
