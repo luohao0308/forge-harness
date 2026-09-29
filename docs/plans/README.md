@@ -1,6 +1,6 @@
 # 实施计划导航
 
-_状态：当前计划索引 | 更新：2026-08-10_
+_状态：当前计划索引 | 更新：2026-08-27_
 
 `docs/plans/` 保存多步骤、高风险或跨模块变更的当前实施计划。它不是任务状态板；任务状态仍以 `docs/TASKS.md` 为准。
 
@@ -31,12 +31,23 @@ _状态：当前计划索引 | 更新：2026-08-10_
 
 | 计划 | 状态 | 关联任务/设计 | 当前阶段 | 更新时间 |
 |---|---|---|---|---|
+| [desktop-secondary-surfaces-codex-convergence-2026-08-27.md](desktop-secondary-surfaces-codex-convergence-2026-08-27.md) | completed | `DESK-SHELL-001`、[DESIGN.md](../../DESIGN.md) | S1-S4 完成；共享壳层、Team、操作页、Settings 与最终 Electron QA 已收口 | 2026-08-27 |
+| [cross-platform-optional-voice-pack-2026-08-26.md](cross-platform-optional-voice-pack-2026-08-26.md) | completed | `VOICE-P2-001` | S1-S4 完成；macOS x64 包、Voice Pack 与真实麦克风链通过 | 2026-08-26 |
+| [desktop-trigger-integrity-hardening-2026-08-19.md](desktop-trigger-integrity-hardening-2026-08-19.md) | completed | `HARD-001`、[DESIGN.md](../../DESIGN.md) | S1-S5 已完成；本地包通过，正式三平台证据仍归 `REL-001` | 2026-08-20 |
+| [desktop-next-capabilities-roadmap-2026-08-17.md](desktop-next-capabilities-roadmap-2026-08-17.md) | approved | `REL-001`、`DESK-002`–`DESK-006` | `DESK-002`–`DESK-006` 已完成；`REL-001` 外部阻塞 | 2026-08-20 |
+| [feature-catalog-pilot-2026-08-17.md](feature-catalog-pilot-2026-08-17.md) | completed | `FCAT-001` | 四个切片已完成；目录、矩阵、brief 和 Docs 门禁均通过 | 2026-08-17 |
+| [desktop-reliability-closeout-2026-08-16.md](desktop-reliability-closeout-2026-08-16.md) | completed | `APP-001`、`APP-002`、`DESK-001`、`REL-001` | 已完成；REL-001 等待正式 Release runner | 2026-08-17 |
 | [desktop-local-session-renewal-2026-08-11.md](desktop-local-session-renewal-2026-08-11.md) | active | Desktop 本地会话续期 | 实施与验证 | 2026-08-11 |
 | [documentation-reorganization-2026-08-10.md](documentation-reorganization-2026-08-10.md) | completed | `DW-002`、[Task Board](../TASKS.md) | 已完成并验证 | 2026-08-10 |
 | [roadmap.md](roadmap.md) | active | 生产就绪路线 | 持续维护 | 2026-08-10 |
 | [roadmap-acceptance.md](roadmap-acceptance.md) | reference | 阶段交付与验收 | 历史/参考 | 2026-08-10 |
 | [workspace-pro-gap-register.md](workspace-pro-gap-register.md) | verified register | Workspace Pro | 已关闭项核验 | 2026-08-10 |
 | [desktop-team-overview-focus-2026-08-13.md](desktop-team-overview-focus-2026-08-13.md) | completed | Desktop Team 概览 / 专注融合 | 阶段 1-3 已实现 | 2026-08-13 |
+| [desktop-startup-p95-optimization-2026-08-17.md](desktop-startup-p95-optimization-2026-08-17.md) | completed_with_cold-run-residual | `REL-001` | 模板、启动诊断、桌面首屏预加载已交付；正式 runner 复核待完成 | 2026-08-17 |
+| [settings-codex-convergence-2026-08-21.md](settings-codex-convergence-2026-08-21.md) | approved | `SETTINGS-CODEX-001` | S1 设置信息架构与统一入口进行中；S2-S5 按序待推进 | 2026-08-21 |
+| [desktop-codex-composer-2026-08-21.md](desktop-codex-composer-2026-08-21.md) | completed | `DESK-007` | S1-S4 已完成；前端/后端 focused 验证和浏览器响应式检查通过 | 2026-08-21 |
+| [workspace-codex-visual-direction-2026-08-21.md](workspace-codex-visual-direction-2026-08-21.md) | completed_with_validation_gap | Agent Console Forge Neutral 视觉收敛 | S1-S4 已完成；全量套件仍有既有 timing/fixture 失败 | 2026-08-21 |
+| [apple-glass-ui-and-naming-2026-08-28.md](apple-glass-ui-and-naming-2026-08-28.md) | approved | `TEAM-COMPOSER-001 follow-up`、[DESIGN.md](../../DESIGN.md) | S1 共享视觉基础进行中；S2-S4 按序待推进 | 2026-08-28 |
 
 ## 维护规则
 

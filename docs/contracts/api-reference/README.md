@@ -289,6 +289,48 @@ Generated from FastAPI OpenAPI metadata.
 - Summary: Update Agent API Gateway route
 - Responses: 200, 422
 
+### `GET /api/agents/{agent_id}/knowledge/project-indexes`
+
+- Tags: agents
+- Summary: 查询 Desktop 项目知识索引
+- Responses: 200, 422
+
+### `POST /api/agents/{agent_id}/knowledge/project-indexes`
+
+- Tags: agents
+- Summary: 绑定 Desktop 项目知识索引
+- Responses: 201, 422
+
+### `GET /api/agents/{agent_id}/knowledge/project-indexes/{index_id}`
+
+- Tags: agents
+- Summary: 查询 Desktop 项目知识索引详情
+- Responses: 200, 422
+
+### `POST /api/agents/{agent_id}/knowledge/project-indexes/{index_id}/pause`
+
+- Tags: agents
+- Summary: 暂停 Desktop 项目知识索引
+- Responses: 200, 422
+
+### `POST /api/agents/{agent_id}/knowledge/project-indexes/{index_id}/resume`
+
+- Tags: agents
+- Summary: 恢复 Desktop 项目知识索引
+- Responses: 200, 422
+
+### `POST /api/agents/{agent_id}/knowledge/project-indexes/{index_id}/sync`
+
+- Tags: agents
+- Summary: 同步 Desktop 项目知识完整快照
+- Responses: 200, 422
+
+### `POST /api/agents/{agent_id}/knowledge/project-indexes/{index_id}/unbind`
+
+- Tags: agents
+- Summary: 解绑 Desktop 项目知识索引并归档来源
+- Responses: 200, 422
+
 ### `GET /api/agents/{agent_id}/knowledge/sources`
 
 - Tags: agents
@@ -449,6 +491,18 @@ Generated from FastAPI OpenAPI metadata.
 
 - Tags: triggers
 - Summary: Update Agent trigger
+- Responses: 200, 422
+
+### `GET /api/agents/{agent_id}/triggers/{trigger_id}/invocations`
+
+- Tags: triggers
+- Summary: List Trigger Invocations
+- Responses: 200, 422
+
+### `GET /api/agents/{agent_id}/triggers/{trigger_id}/invocations/{invocation_id}`
+
+- Tags: triggers
+- Summary: Get Trigger Invocation
 - Responses: 200, 422
 
 ### `GET /api/agents/{agent_id}/versions`
@@ -643,10 +697,28 @@ Generated from FastAPI OpenAPI metadata.
 - Summary: 重置首轮 Demo 数据
 - Responses: 200, 422
 
+### `GET /api/desktop/attention`
+
+- Tags: desktop-sync
+- Summary: Get Desktop Attention
+- Responses: 200, 422
+
+### `POST /api/desktop/change-review/audit`
+
+- Tags: desktop-sync
+- Summary: Record Desktop Change Review Audit
+- Responses: 200, 422
+
 ### `POST /api/desktop/feedback`
 
 - Tags: desktop-sync
 - Summary: Submit Desktop Feedback
+- Responses: 200, 422
+
+### `POST /api/desktop/git-worktree/audit`
+
+- Tags: desktop-sync
+- Summary: Record Desktop Git Worktree Audit
 - Responses: 200, 422
 
 ### `POST /api/desktop/metrics`
@@ -870,6 +942,12 @@ Generated from FastAPI OpenAPI metadata.
 - Tags: local-runtime
 - Summary: Exchange Web Bootstrap
 - Responses: 204, 422
+
+### `POST /api/local-runtime/workspace-authorization`
+
+- Tags: local-runtime
+- Summary: Issue Workspace Authorization
+- Responses: 200, 422
 
 ### `GET /api/mobile/devices`
 

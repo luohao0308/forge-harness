@@ -109,9 +109,9 @@ export function DesktopTeamInspector({
     <aside
       role="complementary"
       aria-label={text("团队检查器", "Team inspector")}
-      className="flex h-full min-h-0 flex-col bg-slate-50/40"
+      className="flex h-full min-h-0 flex-col bg-ui-page"
     >
-      <div className="shrink-0 border-b border-slate-200 bg-white px-3 py-2.5">
+      <div className="glass-surface shrink-0 border-b border-ui-border/70 px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-slate-900">
             <Activity aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-500" />
@@ -143,7 +143,7 @@ export function DesktopTeamInspector({
       <div
         role="tablist"
         aria-label={text("检查器内容", "Inspector content")}
-        className="flex h-9 shrink-0 border-b border-slate-100 bg-white px-2.5"
+        className="glass-surface flex h-9 shrink-0 border-b border-ui-border/70 px-2.5"
       >
         {([
           { id: "activity" as const, label: text("动态", "Activity"), icon: Inbox },

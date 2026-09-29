@@ -6,7 +6,7 @@ export function Skeleton({ className }: { className?: string }) {
 
 export function SkeletonCard() {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-panel">
+    <div className="glass-surface rounded-2xl border border-ui-border/70 p-3 shadow-glass">
       <Skeleton className="h-4 w-32" />
       <Skeleton className="mt-3 h-8 w-24" />
       <Skeleton className="mt-3 h-3 w-full" />
@@ -30,7 +30,7 @@ export function SkeletonTable({ rows = 5, columns = 5 }: { rows?: number; column
 
 export function SkeletonChart() {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-panel">
+    <div className="glass-surface rounded-2xl border border-ui-border/70 p-3 shadow-glass">
       <Skeleton className="h-4 w-28" />
       <Skeleton className="mt-4 h-40 w-full" />
     </div>

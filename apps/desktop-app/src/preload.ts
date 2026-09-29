@@ -3,9 +3,22 @@ import type {
   DesktopApi,
   DesktopFileChangeEvent,
   DesktopFileListResult,
+  DesktopProjectKnowledgeScanOptions,
+  DesktopProjectKnowledgeSnapshot,
   DesktopFileReadResult,
   DesktopFileWatchState,
   DesktopFileWriteResult,
+  DesktopWorkspaceAuthorization,
+  DesktopChangeDiff,
+  DesktopChangeMutationInput,
+  DesktopChangeMutationResult,
+  DesktopChangeReviewStatus,
+  DesktopWorktreeCreateInput,
+  DesktopWorktreeMutationResult,
+  DesktopWorktreeStatus,
+  DesktopVoiceStatus,
+  DesktopVoiceTranscriptionInput,
+  DesktopVoiceTranscriptionResult,
   LocalAgentConversationBinding,
   LocalAgentSendMessagePayload,
   LocalAgentSendMessageResponse,
@@ -29,6 +42,7 @@ import type {
   DesktopProfileSaveInput,
   DesktopWindowSummary,
   DesktopSyncRuntimeStatus,
+  DesktopSyncConflictSummary,
   LocalRuntimeModelConfigInput,
   LocalRuntimeModelDiscovery,
   LocalRuntimeModelDiscoveryInput,
@@ -210,9 +224,22 @@ const desktopApi: DesktopApi = {
       return { taskId: result.task.id, operationId: result.operationId ?? null }
     },
   },
+  offlineAgent: {
+    run: (input) => ipcRenderer.invoke('offline-agent:run', input),
+    listRuns: (limit) => ipcRenderer.invoke('offline-agent:list-runs', limit),
+    getRun: (runId) => ipcRenderer.invoke('offline-agent:get-run', runId),
+    cancel: (runId) => ipcRenderer.invoke('offline-agent:cancel', runId),
+    resume: (runId) => ipcRenderer.invoke('offline-agent:resume', runId),
+    decideApproval: (approvalId, approved) => {
+      return ipcRenderer.invoke('offline-agent:decide-approval', approvalId, approved)
+    },
+  },
   sync: {
     getStatus: (): Promise<DesktopSyncRuntimeStatus> => {
       return ipcRenderer.invoke('sync:get-status')
+    },
+    getConflicts: (): Promise<DesktopSyncConflictSummary> => {
+      return ipcRenderer.invoke('sync:get-conflicts')
     },
     runNow: (): Promise<DesktopSyncRuntimeStatus> => {
       return ipcRenderer.invoke('sync:run-now')
@@ -258,6 +285,9 @@ const desktopApi: DesktopApi = {
     selectWorkspaceRoot: (): Promise<DesktopFileWatchState | null> => {
       return ipcRenderer.invoke('file:select-workspace-root')
     },
+    selectAuthorizedWorkspaceRoot: (): Promise<DesktopWorkspaceAuthorization | null> => {
+      return ipcRenderer.invoke('file:select-authorized-workspace-root')
+    },
     getWorkspaceRoot: (): Promise<DesktopFileWatchState> => {
       return ipcRenderer.invoke('file:get-workspace-root')
     },
@@ -277,6 +307,11 @@ const desktopApi: DesktopApi = {
     }): Promise<DesktopFileListResult> => {
       return ipcRenderer.invoke('file:list-files', options)
     },
+    scanProjectKnowledge: (
+      options?: DesktopProjectKnowledgeScanOptions
+    ): Promise<DesktopProjectKnowledgeSnapshot> => {
+      return ipcRenderer.invoke('file:scan-project-knowledge', options)
+    },
     readFile: (path: string): Promise<DesktopFileReadResult> => {
       return ipcRenderer.invoke('file:read-file', path)
     },
@@ -292,6 +327,46 @@ const desktopApi: DesktopApi = {
         ipcRenderer.removeListener('file:change', listener)
       }
     },
+  },
+  changeReview: {
+    getStatus: (): Promise<DesktopChangeReviewStatus> => {
+      return ipcRenderer.invoke('change-review:get-status')
+    },
+    getDiff: (path: string): Promise<DesktopChangeDiff> => {
+      return ipcRenderer.invoke('change-review:get-diff', path)
+    },
+    mutate: (input: DesktopChangeMutationInput): Promise<DesktopChangeMutationResult> => {
+      return ipcRenderer.invoke('change-review:mutate', input)
+    },
+  },
+  gitWorktree: {
+    getStatus: (): Promise<DesktopWorktreeStatus> => {
+      return ipcRenderer.invoke('git-worktree:get-status')
+    },
+    create: (input: DesktopWorktreeCreateInput): Promise<DesktopWorktreeMutationResult> => {
+      return ipcRenderer.invoke('git-worktree:create', input)
+    },
+    switch: (path: string): Promise<DesktopWorktreeMutationResult> => {
+      return ipcRenderer.invoke('git-worktree:switch', path)
+    },
+    remove: (path: string): Promise<DesktopWorktreeMutationResult> => {
+      return ipcRenderer.invoke('git-worktree:remove', path)
+    },
+    prune: (): Promise<DesktopWorktreeMutationResult> => {
+      return ipcRenderer.invoke('git-worktree:prune')
+    },
+  },
+  voice: {
+    getStatus: (): Promise<DesktopVoiceStatus> => ipcRenderer.invoke('voice:get-status'),
+    installDefaultModel: (): Promise<DesktopVoiceStatus> => {
+      return ipcRenderer.invoke('voice:install-default-model')
+    },
+    importPack: (): Promise<DesktopVoiceStatus> => ipcRenderer.invoke('voice:import-pack'),
+    uninstall: (): Promise<DesktopVoiceStatus> => ipcRenderer.invoke('voice:uninstall'),
+    transcribe: (input: DesktopVoiceTranscriptionInput): Promise<DesktopVoiceTranscriptionResult> => {
+      return ipcRenderer.invoke('voice:transcribe', input)
+    },
+    cancel: (): Promise<boolean> => ipcRenderer.invoke('voice:cancel'),
   },
   events: {
     onMessageStream: (callback: (event: AgentEvent) => void): (() => void) => {

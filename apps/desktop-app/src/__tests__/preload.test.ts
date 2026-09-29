@@ -34,9 +34,31 @@ describe('Preload Script', () => {
         task: expect.any(Object),
         system: expect.any(Object),
         feedback: expect.any(Object),
+        voice: expect.any(Object),
         events: expect.any(Object),
       })
     )
+  })
+
+  test('should expose the optional voice component IPC contract', async () => {
+    vi.resetModules()
+    await import('../preload')
+    const api = mockContextBridge.exposeInMainWorld.mock.calls[0]?.[1]
+    const input = { audio: new Uint8Array([1, 2, 3]), language: 'auto', durationMs: 10 }
+
+    await api.voice.getStatus()
+    await api.voice.installDefaultModel()
+    await api.voice.importPack()
+    await api.voice.uninstall()
+    await api.voice.transcribe(input)
+    await api.voice.cancel()
+
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('voice:get-status')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('voice:install-default-model')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('voice:import-pack')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('voice:uninstall')
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('voice:transcribe', input)
+    expect(mockIpcRenderer.invoke).toHaveBeenCalledWith('voice:cancel')
   })
 
   test('limits the recovery renderer to write-only local runtime setup IPC', async () => {

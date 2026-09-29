@@ -4,10 +4,11 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type ChangeEvent,
   type ReactNode,
 } from "react";
-import { Bot, Brain, Maximize2, UsersRound, X } from "lucide-react";
+import { Bot, Brain, ChevronDown, Maximize2, ShieldCheck, UsersRound, X } from "lucide-react";
 
 import { Badge } from "../../../../components/ui/badge";
 import { notifyFeedback } from "../../../../components/ui/feedback-toast";
@@ -16,6 +17,14 @@ import { ChatComposer, type ComposerAttachment } from "../../../agents/component
 import { ContextRing } from "../../../agents/components/ContextRing";
 import { ContextSummaryManager } from "../../../agents/components/ContextSummaryManager";
 import type { InspectorSection, WorkspaceMode } from "../../../agents/lib/types";
+import {
+  DEFAULT_PERMISSION_MODE,
+  DEFAULT_REASONING_EFFORT,
+  type PermissionMode,
+  type ReasoningEffort,
+} from "../../../agents/lib/workspaceSettings";
+import { VoiceInputButton } from "../../../agents/components/VoiceInputButton";
+import { applyVoiceTranscript, loadVoicePreferences } from "../../../agents/voice/voicePreferences";
 import { copyText } from "../../../agents/lib/clipboard";
 import { stripThinkBlocks } from "../../../agents/lib/copyText";
 import { selectBestCompressionSummary, type ContextCompressionSummary } from "../../../agents/lib/contextCompression";
@@ -43,7 +52,10 @@ import {
   TeamBottomPopover,
   TeamComposerMetadataRow,
   TeamComposerSettingsPanel,
+  TeamPermissionModePanel,
   TeamModelPanel,
+  teamPermissionModeLabel,
+  teamReasoningEffortLabel,
 } from "./TeamComposerPanels";
 import type {
   PendingSend,
@@ -95,7 +107,13 @@ export type AgentColumnProps = {
     reason?: "manual" | "background" | "pre_send",
   ) => Promise<ContextCompressionSummary | null>;
   onComposerChange: (value: TeamComposerStateUpdater) => void;
-  onSend: (content: string, target: string, mode: WorkspaceMode) => void;
+  onSend: (
+    content: string,
+    target: string,
+    mode: WorkspaceMode,
+    reasoningEffort: ReasoningEffort,
+    permissionMode: PermissionMode,
+  ) => void;
   onMessageActionSend: (content: string, target: string) => void;
   onBranchMessage: (nodeId: string, entries: TeamConversationEntry[]) => void;
   onSwitchBranch: (anchorUserId: string, nodeId: string) => void;
@@ -175,6 +193,9 @@ export function AgentColumn({
   const taskScope = tasks.filter((task) => task.owner_slot_id === agent.slot_id);
   const selectedTarget = defaultComposerTarget(agent);
   const selectedMode = composer.mode ?? "chat";
+  const reasoningEffort = composer.reasoningEffort ?? DEFAULT_REASONING_EFFORT;
+  const permissionMode = composer.permissionMode ?? DEFAULT_PERMISSION_MODE;
+  const [voicePreferences] = useState(loadVoicePreferences);
   const status = displayAgentStatus(agent, pendingWakeSlotIds, streamingWakes, settledWakeCutoffs);
   const visibleEntries = teamConversationEntriesWithPending(
     team,
@@ -193,6 +214,7 @@ export function AgentColumn({
   const canStopWake = status === "active";
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const voiceDraftBaseRef = useRef<string | null>(null);
   const rawContextUsageCurrent = useMemo(
     () => teamContextTokenEstimate(visibleEntries, composer.draft),
     [composer.draft, visibleEntries],
@@ -392,7 +414,7 @@ export function AgentColumn({
   );
   const submitComposer = () => {
     if (!composer.draft.trim() || isSending) return;
-    onSend(composer.draft.trim(), selectedTarget, selectedMode);
+    onSend(composer.draft.trim(), selectedTarget, selectedMode, reasoningEffort, permissionMode);
   };
   const columnStyle =
     fullscreen
@@ -407,14 +429,14 @@ export function AgentColumn({
       role="region"
       aria-label={`${agentDisplayName} ${roleLabel} ${text("列", "column")}`}
       className={cn(
-        "flex h-full min-w-0 snap-start flex-col overflow-hidden border-r border-slate-100 bg-white transition-opacity duration-150",
+        "glass-surface flex h-full min-w-0 snap-start flex-col overflow-hidden border-r border-ui-border/70 transition-opacity duration-150",
         isLeader ? "border-l-2 border-l-slate-800" : "",
         isFlashing ? "opacity-60" : "opacity-100",
       )}
       style={columnStyle}
       onClick={onFocus}
     >
-      <div className="flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-slate-100 bg-white px-3 py-2.5">
+      <div className="flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-ui-border/70 bg-ui-surface/45 px-3 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
           <div
             aria-hidden="true"
@@ -483,7 +505,7 @@ export function AgentColumn({
         </div>
       </div>
 
-      <div ref={scrollerRef} className="min-h-0 flex-1 overflow-auto bg-white px-3 py-4">
+      <div ref={scrollerRef} className="min-h-0 flex-1 overflow-auto bg-transparent px-3 py-4">
         <div className="mx-auto w-full max-w-[760px] space-y-4">
           {branchVisibleEntries.length > 0 ? (
             branchVisibleEntries.map((entry) => (
@@ -565,7 +587,7 @@ export function AgentColumn({
       </div>
 
       <div
-        className="shrink-0 border-t border-slate-100 bg-white px-3 pb-4 pt-4"
+        className="shrink-0 border-t border-ui-border/70 bg-ui-surface/45 px-3 pb-4 pt-4"
         data-testid={`team-composer-${agent.slot_id}`}
       >
         <div className="relative mx-auto w-full max-w-3xl">
@@ -578,6 +600,8 @@ export function AgentColumn({
                 ? text("切换模型", "Switch model")
                 : bottomPanel === "mcp"
                   ? text("可用 MCP", "Available MCP")
+                  : bottomPanel === "permission"
+                    ? text("访问权限", "Access permissions")
                 : text("输入设置", "Composer settings")
             }
           >
@@ -588,6 +612,16 @@ export function AgentColumn({
                 selectedModelId={selectedModelId}
                 modelLabelFallback={modelLabel}
                 onModelChange={(providerId, modelId) => onModelChange(agent.slot_id, providerId, modelId)}
+                reasoningEffort={reasoningEffort}
+                onReasoningEffortChange={(value) =>
+                  onComposerChange((current) => ({ ...current, reasoningEffort: value }))
+                }
+                text={text}
+              />
+            ) : bottomPanel === "permission" ? (
+              <TeamPermissionModePanel
+                value={permissionMode}
+                onChange={(value) => onComposerChange((current) => ({ ...current, permissionMode: value }))}
                 text={text}
               />
             ) : (
@@ -628,6 +662,63 @@ export function AgentColumn({
             }
             goalModeToggleVisible={false}
             metadata={<TeamComposerMetadataRow usage={usageSummary} text={text} />}
+            bottomLeft={
+              <div className="flex min-w-0 items-center gap-1">
+                <VoiceInputButton
+                  language={voicePreferences.language}
+                  inputMode={voicePreferences.inputMode}
+                  showControls
+                  onPhaseChange={(phase) => {
+                    if (phase === "starting" && voiceDraftBaseRef.current === null) {
+                      voiceDraftBaseRef.current = composer.draft;
+                    }
+                    if ((phase === "idle" || phase === "error") && voiceDraftBaseRef.current !== null) {
+                      onComposerChange((current) => ({ ...current, draft: voiceDraftBaseRef.current ?? current.draft }));
+                      voiceDraftBaseRef.current = null;
+                    }
+                  }}
+                  onInterimTranscript={(transcript) => {
+                    if (!transcript) return;
+                    const base = voiceDraftBaseRef.current ?? composer.draft;
+                    if (voiceDraftBaseRef.current === null) voiceDraftBaseRef.current = base;
+                    onComposerChange((current) => ({
+                      ...current,
+                      draft: applyVoiceTranscript(base, transcript, voicePreferences.insertionMode),
+                    }));
+                  }}
+                  onTranscript={(transcript) => {
+                    const base = voiceDraftBaseRef.current ?? composer.draft;
+                    voiceDraftBaseRef.current = null;
+                    onComposerChange((current) => ({
+                      ...current,
+                      draft: applyVoiceTranscript(base, transcript, voicePreferences.insertionMode),
+                    }));
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setComposerBottomPanel(
+                      agent.slot_id,
+                      bottomPanel === "permission" ? null : "permission",
+                    )
+                  }
+                  aria-haspopup="dialog"
+                  aria-expanded={bottomPanel === "permission"}
+                  aria-label={text("设置访问权限", "Set access permissions")}
+                  title={text("访问权限", "Access permissions")}
+                  className={cn(
+                    "inline-flex h-8 max-w-[10rem] items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400",
+                    permissionMode === "full-auto"
+                      ? "text-amber-700 hover:bg-amber-50"
+                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-900",
+                  )}
+                >
+                  <ShieldCheck aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{teamPermissionModeLabel(permissionMode, text)}</span>
+                </button>
+              </div>
+            }
             bottomCenter={
               <div className="flex min-w-0 flex-1 items-center justify-end gap-1.5">
                 <ContextRing
@@ -645,11 +736,18 @@ export function AgentColumn({
                     setComposerBottomPanel(agent.slot_id, bottomPanel === "model" ? null : "model")
                   }
                   className="inline-flex h-8 min-w-0 max-w-[8rem] items-center gap-1 rounded-md px-2 text-xs text-slate-600 transition-colors hover:bg-slate-100"
-                  aria-label={text(`切换模型：${modelLabel}`, `Switch model: ${modelLabel}`)}
-                  title={modelLabel}
+                  aria-haspopup="dialog"
+                  aria-expanded={bottomPanel === "model"}
+                  aria-label={text(
+                    `切换模型：${modelLabel}，${teamReasoningEffortLabel(reasoningEffort, text)}`,
+                    `Switch model: ${modelLabel}, ${teamReasoningEffortLabel(reasoningEffort, text)}`,
+                  )}
+                  title={text("模型和推理强度", "Model and reasoning effort")}
                 >
                   <Brain aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">{modelLabel}</span>
+                  <span className="shrink-0">{teamReasoningEffortLabel(reasoningEffort, text)}</span>
+                  <ChevronDown aria-hidden="true" className="h-3 w-3 shrink-0" />
                 </button>
               </div>
             }

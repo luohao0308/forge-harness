@@ -986,6 +986,22 @@ def test_openai_compatible_payload_includes_temperature_for_complete_and_stream(
     )._payload(model_request(), stream=True)
     assert "stream_options" not in platform_streamed
 
+
+def test_openai_reasoning_effort_is_capability_gated() -> None:
+    request_payload = model_request().model_copy(update={"reasoning_effort": "xhigh"})
+    unsupported = OpenAICompatibleModelGateway(
+        base_url="https://models.example.test/v1",
+        api_key="test-key",
+    )._payload(request_payload)
+    assert "reasoning_effort" not in unsupported
+
+    supported = OpenAICompatibleModelGateway(
+        base_url="https://models.example.test/v1",
+        api_key="test-key",
+        supports_reasoning_effort=True,
+    )._payload(request_payload)
+    assert supported["reasoning_effort"] == "xhigh"
+
     bounded = OpenAICompatibleModelGateway(
         base_url="https://models.example.test/v1",
         api_key="test-key",

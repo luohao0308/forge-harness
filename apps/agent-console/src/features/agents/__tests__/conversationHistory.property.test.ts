@@ -7,6 +7,7 @@ import {
   computeConversationTitle,
   genesisConversation,
   legacyMigration,
+  normalizeConversationTitle,
   sortConversationsByUpdatedAt,
   type ConversationSummary,
 } from "../lib/conversationHistory";
@@ -269,5 +270,16 @@ describe("computeConversationTitle: first user message ≤ 40 chars", () => {
     };
     const result = computeConversationTitle({ root: baseNode, u: user }, "FALLBACK");
     expect(result.length).toBe(40);
+  });
+});
+
+describe("normalizeConversationTitle", () => {
+  it("trims a valid title", () => {
+    expect(normalizeConversationTitle("  Ship the desktop preview  ")).toBe("Ship the desktop preview");
+  });
+
+  it("rejects blank and overlong titles", () => {
+    expect(normalizeConversationTitle("   ")).toBeNull();
+    expect(normalizeConversationTitle("a".repeat(81))).toBeNull();
   });
 });

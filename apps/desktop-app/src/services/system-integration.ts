@@ -11,6 +11,7 @@ import {
 } from 'electron'
 import type { AgentEvent, DesktopRoutePayload, SystemNotificationOptions } from '../preload-api'
 import { ensureSingleInstanceLock } from './app-instance'
+import { assertTrustedRendererSender } from './ipc-security'
 
 const APP_NAME = 'Forge Harness Desktop'
 const DEEP_LINK_PROTOCOL = 'agentharness'
@@ -236,16 +237,20 @@ function registerSystemIpcHandlers(): void {
   if (systemHandlersRegistered) return
   systemHandlersRegistered = true
 
-  ipcMain.handle('system:show-window', async (_event, route?: string) => {
+  ipcMain.handle('system:show-window', async (event, route?: string) => {
+    assertTrustedRendererSender(event)
     await showMainWindow(route)
   })
-  ipcMain.handle('system:hide-window', () => {
+  ipcMain.handle('system:hide-window', (event) => {
+    assertTrustedRendererSender(event)
     hideMainWindow()
   })
-  ipcMain.handle('system:get-startup-enabled', () => {
+  ipcMain.handle('system:get-startup-enabled', (event) => {
+    assertTrustedRendererSender(event)
     return app.getLoginItemSettings().openAtLogin
   })
-  ipcMain.handle('system:set-startup-enabled', (_event, enabled: boolean) => {
+  ipcMain.handle('system:set-startup-enabled', (event, enabled: boolean) => {
+    assertTrustedRendererSender(event)
     app.setLoginItemSettings({
       openAtLogin: enabled,
       openAsHidden: true,
@@ -254,10 +259,12 @@ function registerSystemIpcHandlers(): void {
     registerTray()
     return app.getLoginItemSettings().openAtLogin
   })
-  ipcMain.handle('system:notify', (_event, options: SystemNotificationOptions) => {
+  ipcMain.handle('system:notify', (event, options: SystemNotificationOptions) => {
+    assertTrustedRendererSender(event)
     showSystemNotification(options)
   })
-  ipcMain.handle('system:get-pending-route', () => {
+  ipcMain.handle('system:get-pending-route', (event) => {
+    assertTrustedRendererSender(event)
     const route = pendingRoute
     pendingRoute = null
     return route

@@ -7,6 +7,7 @@ import {
 } from "../../../agents/lib/contextCompression";
 import { estimateTextTokens } from "../../../agents/lib/contextTruncation";
 import { normalizeWorkspaceMode, type WorkspaceMode } from "../../../agents/lib/types";
+import type { PermissionMode, ReasoningEffort } from "../../../agents/lib/workspaceSettings";
 import type { UsageSummary } from "../../../agents/components/InspectorDrawer";
 import type { ModelOption } from "../../../agents/components/ModelPicker";
 import type {
@@ -27,6 +28,7 @@ import {
   agentWakeInProgress,
   hasCompletedWakeTurn,
   isRecord,
+  normalizeTeamTimestamp,
 } from "./teamState";
 import type {
   PendingSend,
@@ -96,7 +98,7 @@ export function teamConversationEntries(team: Team, agent: TeamAgent, mailboxMes
         },
         tool_calls: teamToolCalls(metadata),
         artifacts: teamArtifacts(metadata, runId),
-        created_at: message.created_at ?? new Date().toISOString(),
+        created_at: message.created_at ? normalizeTeamTimestamp(message.created_at) : new Date().toISOString(),
       },
       target: targetForTeamMessage(agent, metadata),
       runStatus: readString(metadata, "run_status") ?? readString(metadata, "source_run_status") ?? undefined,
@@ -172,8 +174,10 @@ export function teamPendingSendKey(
   mode: WorkspaceMode,
   content: string,
   files: string[],
+  reasoningEffort: ReasoningEffort = "high",
+  permissionMode: PermissionMode = "confirm",
 ) {
-  return `${slotId}:${target}:${mode}:${content}:${files.join(",")}`;
+  return `${slotId}:${target}:${mode}:${reasoningEffort}:${permissionMode}:${content}:${files.join(",")}`;
 }
 
 export function teamConversationEntriesWithPending(
@@ -432,6 +436,8 @@ export function deriveTeamModelOptions(settings: ModelSettings | undefined): Mod
       providerLabel: label,
       modelId: model,
       modelLabel: model,
+      supportsReasoningEffort:
+        record.supports_reasoning_effort === true || record.supportsReasoningEffort === true,
     });
   }
   return out;

@@ -352,8 +352,8 @@ function routeTeamApis(state: TeamState) {
         default_provider: "default",
         default_model: "default",
         providers: [
-          { name: "default", label: "Default", model: "default" },
-          { name: "deepseek-pro", label: "DeepSeek Pro", model: "deepseek-v4-pro" },
+          { name: "default", label: "Default", model: "default", supports_reasoning_effort: true },
+          { name: "deepseek-pro", label: "DeepSeek Pro", model: "deepseek-v4-pro", supports_reasoning_effort: true },
         ],
         rate_limits: {},
         health: {},
@@ -600,9 +600,13 @@ function routeTeamApis(state: TeamState) {
         from_agent_slot_id?: string;
         type?: string;
         mode?: TeamMessageMode;
+        reasoning_effort?: "light" | "medium" | "high" | "xhigh" | "max";
+        permission_mode?: "confirm" | "auto-edit" | "full-auto";
       }>(init);
       state.lastMessagePayload = payload;
       const workspaceMode = payload.mode ?? "chat";
+      const reasoningEffort = payload.reasoning_effort ?? "high";
+      const permissionMode = payload.permission_mode ?? "confirm";
       const recipients =
         payload.target === "team"
           ? team.agents
@@ -619,7 +623,11 @@ function routeTeamApis(state: TeamState) {
           from_agent_slot_id: payload.from_agent_slot_id ?? "user",
           type: payload.type ?? "message",
           content: payload.content,
-          metadata_json: { workspace_mode: workspaceMode },
+          metadata_json: {
+            workspace_mode: workspaceMode,
+            reasoning_effort: reasoningEffort,
+            permission_mode: permissionMode,
+          },
           created_at: now,
         }),
       );
@@ -641,6 +649,8 @@ function routeTeamApis(state: TeamState) {
               to_agent_slot_id: message.to_agent_slot_id,
               message_type: message.type,
               workspace_mode: workspaceMode,
+              reasoning_effort: reasoningEffort,
+              permission_mode: permissionMode,
             },
             created_at: message.created_at ?? now,
           }),
@@ -924,6 +934,29 @@ describe("Team pages", () => {
     expect(screen.queryByText("团队模式")).not.toBeInTheDocument();
   });
 
+  it("keeps the workspace return and tools available in the empty desktop Team state", async () => {
+    (window as unknown as { desktopApi?: unknown }).desktopApi = {};
+    const state = stateFixture();
+    state.teams = [];
+    const fetchMock = routeTeamApis(state);
+
+    renderWithClient(
+      <Routes>
+        <Route path="/teams" element={<TeamListPage />} />
+      </Routes>,
+      fetchMock,
+      ["/teams?return_to=%2Fagents%2Fresearch-agent%2Fworkspace%3Fconversation_id%3Dconv-7"],
+    );
+
+    expect(await screen.findByRole("heading", { name: "团队模式" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "返回工作台" })).toHaveAttribute(
+      "href",
+      "/agents/research-agent/workspace?conversation_id=conv-7",
+    );
+    expect(screen.getByRole("button", { name: "工作台工具" })).toBeInTheDocument();
+    expect(await screen.findByText("还没有团队")).toBeInTheDocument();
+  });
+
   it("renders columns, creates members, and supports direct mailbox messages", async () => {
     const user = userEvent.setup();
     const state = stateFixture();
@@ -1124,7 +1157,12 @@ describe("Team pages", () => {
     const viewSwitch = await screen.findByRole("group", { name: "团队工作区视图" });
     expect(within(viewSwitch).getByRole("button", { name: "协作" })).toHaveAttribute("aria-pressed", "true");
     expect(await screen.findByTestId("desktop-team-overview")).toBeInTheDocument();
-    expect(screen.getByRole("complementary", { name: "团队系统看板" })).toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: "团队系统看板" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "打开团队状态" }));
+    const statusPanel = screen.getByRole("complementary", { name: "团队系统看板" });
+    expect(statusPanel).toBeInTheDocument();
+    await user.click(within(statusPanel).getByRole("button", { name: "关闭团队状态" }));
+    expect(screen.queryByRole("complementary", { name: "团队系统看板" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("代理会话列")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "进入 产品经理 专注对话" }));
@@ -1133,7 +1171,7 @@ describe("Team pages", () => {
     const collaborationColumn = screen.getByRole("region", { name: /产品经理 成员 列/ });
     await user.click(screen.getByRole("button", { name: "返回团队概览" }));
     expect(await screen.findByTestId("desktop-team-overview")).toBeInTheDocument();
-    expect(screen.getByRole("complementary", { name: "团队系统看板" })).toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: "团队系统看板" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "进入 队长 专注对话" }));
     expect(await screen.findByRole("button", { name: "返回团队概览" })).toBeInTheDocument();
     const leaderColumn = await screen.findByRole("region", { name: /队长 队长 列/ });
@@ -1182,7 +1220,7 @@ describe("Team pages", () => {
     );
 
     expect(await screen.findByTestId("desktop-team-overview")).toBeInTheDocument();
-    expect(screen.getByRole("complementary", { name: "团队系统看板" })).toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: "团队系统看板" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "团队任务图" })).not.toBeInTheDocument();
   });
 
@@ -1266,6 +1304,8 @@ describe("Team pages", () => {
 
     const productColumn = (await screen.findAllByRole("region", { name: /产品经理 成员 列/ }))[0];
     const textbox = within(productColumn).getByRole("textbox");
+    expect(within(productColumn).getByRole("button", { name: /语音输入/ })).toBeInTheDocument();
+    expect(within(productColumn).getByRole("button", { name: "设置访问权限" })).toBeInTheDocument();
 
     expect(within(productColumn).queryByRole("button", { name: "追踪目标模式" })).not.toBeInTheDocument();
     await user.type(textbox, "/goal");
@@ -1391,6 +1431,33 @@ describe("Team pages", () => {
       });
     });
     expect(await within(productColumn).findByText("deepseek-pro / deepseek-v4-pro")).toBeInTheDocument();
+
+    await user.click(within(productColumn).getByRole("button", { name: /切换模型/ }));
+    fireEvent.change(within(productColumn).getByRole("slider", { name: "推理强度" }), {
+      target: { value: "4" },
+    });
+    expect(within(productColumn).getByRole("slider", { name: "推理强度" })).toHaveValue("4");
+    await user.click(within(productColumn).getByRole("button", { name: "设置访问权限" }));
+    await user.click(
+      within(within(productColumn).getByRole("dialog", { name: "访问权限" })).getByRole("button", {
+        name: /完全自动/,
+      }),
+    );
+    await user.type(textbox, "带控制参数的团队消息{Enter}");
+    await waitFor(() => {
+      expect(state.lastMessagePayload).toMatchObject({
+        content: "带控制参数的团队消息",
+        reasoning_effort: "max",
+        permission_mode: "full-auto",
+      });
+    });
+    const controlledMessage = state.teams[0].messages.find(
+      (message) => message.content === "带控制参数的团队消息",
+    );
+    expect(controlledMessage?.metadata_json).toMatchObject({
+      reasoning_effort: "max",
+      permission_mode: "full-auto",
+    });
 
   }, 15000);
 

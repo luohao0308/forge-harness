@@ -37,7 +37,6 @@ import {
 
 import { Button } from "../components/ui/button";
 import { FeedbackToastViewport } from "../components/ui/feedback-toast";
-import { DesktopOperationRail } from "../components/desktop/DesktopOperationRail";
 import { QuickActionFAB } from "../components/ui/QuickActionFAB";
 import { WorkspaceSwitcher } from "../components/WorkspaceSwitcher";
 import { prepareAvatarUpload } from "../features/auth/avatarUpload";
@@ -151,10 +150,10 @@ function ConsoleNavGroupView({
       <button
         type="button"
         className={cn(
-          "flex min-h-11 w-full items-center gap-2 rounded-md px-2.5 text-left text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300",
+          "flex min-h-11 w-full items-center gap-2 rounded-md px-2.5 text-left text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong",
           childActive
-            ? "bg-slate-100 text-slate-900"
-            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+            ? "bg-ui-selected text-ui-ink"
+            : "text-ui-muted hover:bg-ui-subtle hover:text-ui-ink",
         )}
         aria-controls={childListId}
         aria-expanded={isOpen}
@@ -174,7 +173,7 @@ function ConsoleNavGroupView({
         <span className="min-w-0 flex-1 truncate">{group.label}</span>
         <ChevronDown
           className={cn(
-            "h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform",
+            "h-3.5 w-3.5 shrink-0 text-ui-faint transition-transform",
             isOpen && "rotate-180",
           )}
           aria-hidden="true"
@@ -202,12 +201,12 @@ function ConsoleNavLink({ item, child = false }: { item: ConsoleNavItem; child?:
           "mb-1 flex min-h-11 items-center rounded-md text-[13px]",
           child ? "gap-2 px-2" : "gap-2 px-2.5",
           child && isActive
-            ? "border-l-2 border-slate-900 bg-slate-100 pl-[10px] font-semibold text-slate-900"
+            ? "border-l-2 border-ui-ink bg-ui-selected pl-[10px] font-semibold text-ui-ink"
             : child
-              ? "pl-3 text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+              ? "pl-3 text-ui-muted hover:bg-ui-subtle hover:text-ui-ink"
               : isActive
-                ? "bg-slate-100 text-slate-900"
-                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                ? "bg-ui-selected text-ui-ink"
+                : "text-ui-muted hover:bg-ui-subtle hover:text-ui-ink",
         )
       }
     >
@@ -232,6 +231,10 @@ export function ConsoleShell({ children, title }: { children: ReactNode; title: 
   const isTeamRoute = /^\/teams(?:\/|$)/.test(location.pathname);
   const isRunRoute = /^\/runs(?:\/|$)/.test(location.pathname);
   const isTerminalRoute = location.pathname === "/terminal";
+  const isAttentionRoute = location.pathname === "/attention";
+  const isChangesRoute = location.pathname === "/changes";
+  const isAutomationsRoute = location.pathname === "/agents"
+    && new URLSearchParams(location.search).get("desktop_panel") === "triggers";
   const isDesktopSettingsRoute = location.pathname === "/desktop" || location.pathname === "/settings/advanced";
   const desktop = isDesktopRuntime();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(isWorkspaceRoute);
@@ -344,7 +347,7 @@ export function ConsoleShell({ children, title }: { children: ReactNode; title: 
     return (
       <div
         data-testid="desktop-workspace-shell"
-        className="flex h-screen min-h-0 min-w-0 overflow-hidden bg-white text-slate-800"
+        className="flex h-screen min-h-0 min-w-0 overflow-hidden bg-ui-page text-ui-ink"
         lang="zh-CN"
         translate="no"
       >
@@ -354,16 +357,15 @@ export function ConsoleShell({ children, title }: { children: ReactNode; title: 
     );
   }
 
-  if (desktop && (isTeamRoute || isRunRoute || isTerminalRoute || isDesktopSettingsRoute)) {
+  if (desktop && (isTeamRoute || isRunRoute || isTerminalRoute || isAttentionRoute || isChangesRoute || isAutomationsRoute || isDesktopSettingsRoute)) {
     return (
       <div
-        data-testid="desktop-operation-shell"
-        className="flex h-screen min-h-0 min-w-0 overflow-hidden bg-white text-slate-800"
+        data-testid="desktop-surface-shell"
+        className="flex h-screen min-h-0 min-w-0 overflow-hidden bg-ui-page text-ui-ink"
         lang="zh-CN"
         translate="no"
       >
         <FeedbackToastViewport />
-        <DesktopOperationRail />
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</main>
       </div>
     );
@@ -371,7 +373,7 @@ export function ConsoleShell({ children, title }: { children: ReactNode; title: 
 
   return (
     <div
-      className="flex h-screen overflow-hidden bg-page text-slate-800"
+      className="flex h-screen overflow-hidden bg-ui-page text-ui-ink"
       lang="zh-CN"
       translate="no"
     >
@@ -379,20 +381,20 @@ export function ConsoleShell({ children, title }: { children: ReactNode; title: 
       {!isWorkspaceRoute && !isTeamRoute ? <QuickActionFAB /> : null}
       <aside
         className={cn(
-          "flex h-screen min-h-0 shrink-0 flex-col border-r border-slate-200 bg-white transition-[width] duration-200",
+          "glass-surface flex h-screen min-h-0 shrink-0 flex-col border-r border-ui-border/70 bg-ui-sidebar/80 transition-[width] duration-200",
           isTeamRoute && isNarrowShell && "hidden",
           effectiveSidebarCollapsed ? (isTeamRoute ? "w-[44px]" : "w-[64px]") : "w-[248px]",
         )}
       >
         <div
           className={cn(
-            "flex h-14 items-center border-b border-slate-200",
+            "flex h-14 items-center border-b border-ui-border/70",
             effectiveSidebarCollapsed ? (isTeamRoute ? "justify-center px-1" : "justify-center px-2") : "gap-2 px-4",
           )}
         >
           <div
             className={cn(
-              "flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-900 transition-opacity",
+              "flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-ui-ink transition-opacity",
               effectiveSidebarCollapsed && "hidden",
             )}
           >
@@ -451,8 +453,8 @@ export function ConsoleShell({ children, title }: { children: ReactNode; title: 
                     "mb-1 flex min-h-11 w-full items-center rounded-md text-[13px]",
                     "justify-center px-0",
                     isActive
-                      ? "bg-slate-100 text-slate-900"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                      ? "bg-ui-selected text-ui-ink"
+                      : "text-ui-muted hover:bg-ui-subtle hover:text-ui-ink",
                   )
                 }
               >
@@ -474,7 +476,7 @@ export function ConsoleShell({ children, title }: { children: ReactNode; title: 
         </nav>
         <div
           className={cn(
-            "border-t border-slate-200 text-[11px] text-slate-500",
+            "border-t border-ui-border text-[11px] text-ui-muted",
             effectiveSidebarCollapsed ? "p-2" : "p-3",
           )}
         >
@@ -503,24 +505,24 @@ export function ConsoleShell({ children, title }: { children: ReactNode; title: 
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header
           className={cn(
-            "flex min-w-0 items-center gap-2 border-b border-slate-200 bg-white px-3 sm:gap-3 sm:px-5",
+            "glass-surface flex min-w-0 items-center gap-2 border-b border-ui-border/70 bg-ui-surface/70 px-3 sm:gap-3 sm:px-5",
             isTeamRoute ? "h-0 overflow-hidden border-b-0 px-0" : "h-14",
           )}
         >
-          <div className="flex min-w-0 items-center gap-2 text-[13px] text-slate-500">
+          <div className="flex min-w-0 items-center gap-2 text-[13px] text-ui-muted">
             <span>控制台</span>
-            <span className="text-slate-300">/</span>
-            <span className="truncate text-slate-900">{title}</span>
+            <span className="text-ui-faint">/</span>
+            <span className="truncate text-ui-ink">{title}</span>
           </div>
           {!isTeamRoute ? (
-            <div className="ml-6 hidden h-8 w-72 items-center gap-2 rounded-md border border-slate-200 bg-slate-50/70 px-2.5 lg:flex">
-              <Search className="h-3.5 w-3.5 text-slate-400" />
+            <div className="glass-control ml-6 hidden h-8 w-72 items-center gap-2 rounded-xl border border-ui-border/70 px-2.5 lg:flex">
+              <Search className="h-3.5 w-3.5 text-ui-faint" />
               <input
                 aria-label="搜索"
                 placeholder="搜索运行、智能体、事件..."
-                className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-slate-400"
+                className="min-w-0 flex-1 bg-transparent text-xs text-ui-ink outline-none placeholder:text-ui-faint"
               />
-              <span className="font-mono text-[10px] text-slate-400">⌘K</span>
+              <span className="font-mono text-[10px] text-ui-faint">⌘K</span>
             </div>
           ) : null}
           <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -568,7 +570,7 @@ export function ConsoleShell({ children, title }: { children: ReactNode; title: 
                     firstItem?.focus();
                   });
                 }}
-                className="flex h-8 min-w-8 max-w-44 items-center gap-2 rounded-full border border-slate-200 bg-white px-1.5 text-left text-[11px] text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 sm:min-w-36 sm:px-2"
+                className="glass-control flex h-8 min-w-8 max-w-44 items-center gap-2 rounded-full border border-slate-200/80 px-1.5 text-left text-[11px] text-slate-700 shadow-sm transition-colors hover:bg-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 sm:min-w-36 sm:px-2"
               >
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-900 text-[10px] font-semibold text-white">
                   {avatarDataUrl ? (
@@ -610,7 +612,7 @@ export function ConsoleShell({ children, title }: { children: ReactNode; title: 
                       items[items.length - 1]?.focus();
                     }
                   }}
-                  className="absolute right-0 top-full z-40 mt-2 w-72 overflow-hidden rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-none"
+                  className="glass-surface-strong absolute right-0 top-full z-40 mt-2 w-72 overflow-hidden rounded-2xl border border-slate-200/70 p-1 text-sm shadow-glass"
                 >
                   <div className="border-b border-slate-100 px-3 py-3">
                     <div className="flex items-center gap-2">

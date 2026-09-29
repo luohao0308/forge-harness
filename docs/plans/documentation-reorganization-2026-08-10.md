@@ -23,13 +23,13 @@ _状态：completed | 更新：2026-08-10 | 范围：仓库文档源文件与任
 | `docs/00-10-*.md` | `docs/design/`、`docs/architecture/`、`docs/contracts/`、`docs/testing/` | 按产品、架构、契约、评测职责拆分并更新索引 |
 | `docs/contracts/api/`、`docs/contracts/api-reference/` | `docs/contracts/api/`、`docs/contracts/api-reference/` | OpenAPI 源/生成物同属契约，生成脚本改用新路径 |
 | `docs/human/` | 各领域目录 | 按开发、设计、架构、运维、计划、任务职责拆分；不保留第二套权威源 |
-| `docs/project-memory/runbooks/` | `docs/project-memory/runbooks/` | 可重复操作与排障保留为长期 Runbook |
+| `docs/operations/runbooks/` | `docs/operations/runbooks/` | 可重复操作与排障保留为长期 Runbook |
 | `docs/工作日志/reports/` | `docs/工作日志/reports/` | 历史评审、验证报告和 DOCX 归档 |
 | `docs/design/media/demo/`、`docs/design/media/gifs/`、`docs/design/media/screenshots/` | `docs/design/media/` | 演示说明和视觉证据按设计/媒体归档 |
 | `docs/testing/evals/`、`docs/testing/qa/`、`docs/testing/benchmark-spec.md` | `docs/testing/` | 测试策略、Eval、Benchmark 统一入口 |
 | `docs/plans/roadmap.md`、`docs/plans/workspace-pro-gap-register.md` | `docs/plans/` | 当前计划/差距登记；已关闭项转历史说明 |
 | `docs/development/cli/`、`docs/development/sdk/`、`docs/development/CONTRIBUTING.md` | `docs/development/` | 开发、CLI、SDK 与贡献流程 |
-| `docs/architecture/terminal-architecture.md`、`docs/architecture/websocket-architecture.md`、`docs/project-memory/runbooks/troubleshooting-overview.md` | `docs/architecture/` 或 `docs/project-memory/runbooks/` | 依据架构/操作职责合并重复内容 |
+| `docs/architecture/terminal-architecture.md`、`docs/architecture/websocket-architecture.md`、`docs/operations/runbooks/troubleshooting-overview.md` | `docs/architecture/` 或 `docs/operations/runbooks/` | 依据架构/操作职责合并重复内容 |
 
 ## 任务板核验结果
 

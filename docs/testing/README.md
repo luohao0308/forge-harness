@@ -8,7 +8,11 @@ _状态：active | 更新：2026-08-10_
 - 测试配置使用 fake/mock、临时目录、容器或专用测试实例，不复制生产凭据。
 - 诊断脚本、破坏性测试和外部集成测试必须与默认测试套件区分。
 
-## 2. 命令入口
+## 2. 默认验证路径
+
+声明/验收标准 → 测试或 Eval 先行 → 定向检查 → 按风险扩大 → 记录证据。确定性代码优先用失败测试驱动最小实现；模型、Prompt 和 Agent 行为优先使用固定 fixture 与 Eval。每条验收标准至少对应一个可执行检查；测试先行不适用时记录原因、替代证据和剩余风险。
+
+## 3. 命令入口
 
 当前规格与用例入口： [eval-harness-spec.md](eval-harness-spec.md)、[benchmark-spec.md](benchmark-spec.md)、[evals/](evals/) 和 [qa/test-strategy.md](qa/test-strategy.md)。
 
@@ -23,7 +27,7 @@ _状态：active | 更新：2026-08-10_
 | 类型/静态检查 | Console `npm run lint`；Desktop `npm run type-check`；`node --check` | 客户端/脚本 | Node 20+ | 是 |
 | 构建/编译 | Console `npm run build`；Desktop `npm run build:main`；Website `npm run build` | 各应用 | lockfile/平台依赖 | 是 |
 
-## 3. 变更到测试的映射
+## 4. 变更到测试的映射
 
 | 改动范围 | 最低测试 | 升级为全量验证的条件 |
 |---|---|---|
@@ -33,7 +37,7 @@ _状态：active | 更新：2026-08-10_
 | 数据模型/迁移 | 迁移演练 + 数据断言 | 生产数据回填/删除 |
 | 配置/依赖/启动逻辑 | 静态检查 + 重启冒烟 | 发布或基础设施变化 |
 
-## 4. 验证顺序
+## 5. 验证顺序
 
 1. 定义要证明的声明和成功条件。
 2. 先运行能快速区分正确/错误的定向检查。
@@ -41,7 +45,7 @@ _状态：active | 更新：2026-08-10_
 4. 读取输出，不只记录退出码。
 5. 失败则修正并重跑；无法运行则记录原因、影响和替代证据。
 
-## 5. 提交前最小门禁
+## 6. 提交前最小门禁
 
 - [ ] 与改动直接相关的测试通过。
 - [ ] lint、格式、类型或静态检查按项目要求通过。
@@ -49,6 +53,6 @@ _状态：active | 更新：2026-08-10_
 - [ ] 运行时变更已重启任务服务并冒烟。
 - [ ] 契约、迁移、生成物和文档同步检查完成。
 
-## 6. 当前发布门禁参考
+## 7. 当前发布门禁参考
 
 完整门禁以 [开发贡献指南](../development/CONTRIBUTING.md) 和 `.github/workflows/` 为准；常用最低集为 API pytest/Ruff、Console lint/build、Desktop 受影响测试、`python3 scripts/validate-docs.py` 与 `git diff --check`。

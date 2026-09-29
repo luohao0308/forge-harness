@@ -30,7 +30,7 @@ _状态：active | 更新：2026-08-10_
 
 | 问题 | 第一证据 | 下一步 | Runbook |
 |---|---|---|---|
-| API 不可用 | readiness + container logs | `docker compose ps`、依赖健康、migration head | [troubleshooting](../project-memory/runbooks/troubleshooting.md) |
-| Agent Run 失败 | Run/Event/ModelCall/ToolCall trace | 按 run_id 查 replay、policy、provider 错误 | [sse-streaming](../project-memory/runbooks/sse-streaming.md) |
-| 迁移失败 | Alembic output + DB health | 记录 revision、备份和当前 schema | [migrations](../project-memory/runbooks/migrations.md)、[rollback](../project-memory/runbooks/rollback.md) |
+| API 不可用 | readiness + container logs | `docker compose ps`、依赖健康、migration head | [troubleshooting](runbooks/troubleshooting.md) |
+| Agent Run 失败 | Run/Event/ModelCall/ToolCall trace | 按 run_id 查 replay、policy、provider 错误 | [sse-streaming](runbooks/sse-streaming.md) |
+| 迁移失败 | Alembic output + DB health | 记录 revision、备份和当前 schema | [migrations](runbooks/migrations.md)、[rollback](runbooks/rollback.md) |
 | Desktop 启动慢/空白 | startup report + native/renderer logs | 运行 focused startup tests 和 isolated package smoke | [desktop](../development/desktop/README.md) |

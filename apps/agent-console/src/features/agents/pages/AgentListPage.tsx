@@ -20,7 +20,7 @@ import {
   Terminal,
   Wrench,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import { ConsoleShell } from "../../../app/ConsoleShell";
 import { Badge, statusTone, type BadgeTone } from "../../../components/ui/badge";
@@ -31,6 +31,7 @@ import { Input, Textarea } from "../../../components/ui/input";
 import { Card, CardHeader } from "../../../components/ui/card";
 import { MenuSelect } from "../../../components/ui/menu-select";
 import { RefreshOverlay } from "../../../components/ui/refresh-overlay";
+import { isDesktopRuntime } from "../../../lib/desktop-bridge";
 import { cn } from "../../../lib/utils";
 import { useI18n } from "../../../lib/i18n";
 import { statusLabel } from "../../../lib/labels";
@@ -56,6 +57,7 @@ import {
   type TokenOptimizerPresetId,
 } from "../../tasks/api";
 import { KnowledgeManagementPanel } from "../components/KnowledgeManagementPanel";
+import { AutomationPanel } from "../../automations/components/AutomationPanel";
 import { AgentReadinessRing } from "../components/AgentReadinessRing";
 import { CollapsibleCapabilitySection } from "../components/CollapsibleCapabilitySection";
 import { copyText } from "../lib/clipboard";
@@ -82,6 +84,7 @@ function writeStoredSelectedAgentId(agentId: string) {
 
 export function AgentListPage() {
   const { text } = useI18n();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const agents = useQuery({ queryKey: ["agents"], queryFn: listAgents });
   const [selectedAgentId, setSelectedAgentId] = useState(readStoredSelectedAgentId);
@@ -535,6 +538,21 @@ export function AgentListPage() {
     localAgentConnections.isLoading ||
     createLocalAgentPairingMutation.isPending ||
     localDiscoveryManualRefreshing;
+
+  if (new URLSearchParams(location.search).get("desktop_panel") === "triggers") {
+    return (
+      <ConsoleShell title={text("自动化", "Automations")}>
+        <AutomationPanel
+          agentId={selectedAgentId}
+          agentLabel={selectedAgentLabel}
+          agents={(agents.data?.items ?? []).map((agent) => ({ id: agent.id, name: agent.name }))}
+          agentsLoading={agents.isLoading}
+          onAgentChange={selectConfigurationAgent}
+          desktopLayout={isDesktopRuntime()}
+        />
+      </ConsoleShell>
+    );
+  }
 
   return (
     <ConsoleShell title={text("智能体工作室", "Agent Studio")}>

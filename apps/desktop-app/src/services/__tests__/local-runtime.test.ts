@@ -90,7 +90,7 @@ describe('managed local harnessd runtime', () => {
         models: ['deepseek-v4-flash', 'deepseek-v4-pro'],
         latency_ms: 27,
       }))
-      .mockResolvedValueOnce(jsonResponse(200, { token: 'one time/token' }))
+      .mockResolvedValueOnce(jsonResponse(200, { token: 'one time/token', expires_at: new Date(Date.now() + 60_000).toISOString() }))
     const bootstrap = {
       session_signing_secret: 'session-secret-value',
       vault_encryption_secret: 'vault-secret-value',
@@ -101,6 +101,7 @@ describe('managed local harnessd runtime', () => {
       persistent_secret_storage: true,
     }
     const { LocalRuntimeManager } = await import('../local-runtime')
+    const onStartupDiagnostic = vi.fn()
     const manager = new LocalRuntimeManager({
       userDataPath: root,
       resourcesPath: root,
@@ -112,12 +113,17 @@ describe('managed local harnessd runtime', () => {
       startupTimeoutMs: 1_000,
       healthPollMs: 1,
       shutdownTimeoutMs: 5,
+      onStartupDiagnostic,
     })
     let stdin = ''
     child.stdin.on('data', (chunk) => { stdin += chunk.toString() })
     setTimeout(() => child.stdout.write(`${JSON.stringify(readyHandshake())}\n`), 0)
 
     const endpoint = await manager.start()
+    expect(onStartupDiagnostic.mock.calls.map(([milestone]) => milestone)).toEqual([
+      'sidecar_spawned',
+      'sidecar_ready',
+    ])
     const cookieSet = vi.fn(() => Promise.resolve())
     await manager.installDesktopSession({ cookies: { set: cookieSet } } as never)
     await expect(manager.applyModelApiKey('replacement-key')).resolves.toEqual(modelStatus('configured'))
@@ -137,7 +143,11 @@ describe('managed local harnessd runtime', () => {
     expect(await manager.openWebExtension()).toBeUndefined()
 
     expect(endpoint.origin).toBe('http://127.0.0.1:43117')
-    const [, args, spawnOptions] = spawnRuntime.mock.calls[0]
+    const [, args, spawnOptions] = spawnRuntime.mock.calls[0] as unknown as [
+      string,
+      string[],
+      { env?: NodeJS.ProcessEnv },
+    ]
     expect(args).toEqual(['--port', '0', '--static-dir', path.join(root, 'renderer')])
     expect(JSON.stringify(args)).not.toContain('secret-value')
     expect(JSON.stringify(spawnOptions.env)).not.toContain('secret-value')
@@ -489,6 +499,117 @@ describe('managed local harnessd runtime', () => {
     await expect(manager.start()).rejects.toThrow('file is missing')
   })
 
+  test('gates endpoint trust on the deferred v2 tree check without retrying tampered runtimes', async () => {
+    const resourcesPath = path.join(root, 'resources')
+    const runtimeRoot = path.join(resourcesPath, 'runtime', process.platform, process.arch)
+    const nestedExecutable = path.join(runtimeRoot, 'harnessd', process.platform === 'win32' ? 'harnessd.exe' : 'harnessd')
+    const libraryPath = path.join(runtimeRoot, 'harnessd', 'runtime-library.bin')
+    fs.mkdirSync(path.dirname(nestedExecutable), { recursive: true })
+    fs.writeFileSync(nestedExecutable, 'onedir runtime')
+    fs.writeFileSync(libraryPath, 'runtime library')
+    writeV2Manifest(runtimeRoot, nestedExecutable, [nestedExecutable, libraryPath])
+
+    const children: FakeChild[] = []
+    const spawnRuntime = vi.fn(() => {
+      const child = fakeChild()
+      children.push(child)
+      setTimeout(() => child.stdout.write(`${JSON.stringify(readyHandshake())}\n`), 0)
+      return child
+    })
+    const onEndpoint = vi.fn()
+    const { LocalRuntimeManager } = await import('../local-runtime')
+    const manager = new LocalRuntimeManager({
+      userDataPath: root,
+      resourcesPath,
+      spawnRuntime: spawnRuntime as never,
+      fetchRuntime: vi.fn(() => Promise.resolve(jsonResponse(200, { runtime_ready: true }))),
+      createSecrets: () => ({
+        session_signing_secret: 'session',
+        vault_encryption_secret: 'vault',
+        desktop_bootstrap_token: 'desktop',
+        persistent_secret_storage: true,
+      }),
+      initialBackoffMs: 5,
+      maxRestarts: 3,
+      startupTimeoutMs: 1_000,
+      shutdownTimeoutMs: 10,
+      onEndpoint,
+    })
+
+    // The executable stays valid so the pre-spawn identity check passes while a
+    // support file is corrupt: the deferred tree check must still refuse trust.
+    fs.writeFileSync(libraryPath, 'tampered library')
+    await expect(manager.start()).rejects.toThrow('checksum verification failed: harnessd/runtime-library.bin')
+    expect(spawnRuntime).toHaveBeenCalledTimes(1)
+    expect(onEndpoint).not.toHaveBeenCalled()
+    expect(children[0].kill).toHaveBeenCalledWith('SIGTERM')
+  })
+
+  test('unpackaged runtime resolution falls back to the project resources tree and bundled renderer', async () => {
+    const previousStaticDir = process.env.HARNESSD_STATIC_DIR
+    const previousDevExecutable = process.env.HARNESSD_DEV_EXECUTABLE
+    delete process.env.HARNESSD_STATIC_DIR
+    delete process.env.HARNESSD_DEV_EXECUTABLE
+    vi.doMock('electron', () => ({
+      app: {
+        getPath: vi.fn(() => root),
+        isPackaged: false,
+      },
+      shell: { openExternal },
+    }))
+    let resolveLocalRuntimePaths: typeof import('../local-runtime')['resolveLocalRuntimePaths']
+    try {
+      const moduleDirectory = path.resolve(__dirname, '..')
+      ;({ resolveLocalRuntimePaths } = await import('../local-runtime'))
+      const paths = resolveLocalRuntimePaths({ userDataPath: root })
+      expect(paths.runtimeRoot).toBe(path.join(
+        path.resolve(moduleDirectory, '..', '..', 'resources'),
+        'runtime',
+        process.platform,
+        process.arch,
+      ))
+      expect(paths.staticDir).toBe(path.resolve(moduleDirectory, '..', 'renderer'))
+      expect(paths.executablePath.startsWith(`${paths.runtimeRoot}${path.sep}`)).toBe(true)
+      expect(paths.runtimeDataDir).toBe(path.join(root, 'runtime'))
+    } finally {
+      if (previousStaticDir !== undefined) process.env.HARNESSD_STATIC_DIR = previousStaticDir
+      if (previousDevExecutable !== undefined) process.env.HARNESSD_DEV_EXECUTABLE = previousDevExecutable
+    }
+
+    const withExplicitResources = resolveLocalRuntimePaths({ userDataPath: root, resourcesPath: path.join(root, 'resources') })
+    expect(withExplicitResources.runtimeRoot).toBe(path.join(root, 'resources', 'runtime', process.platform, process.arch))
+    expect(withExplicitResources.staticDir).toBe(path.join(root, 'resources', 'renderer'))
+  })
+
+  test('surfaces the harnessd stderr tail when the sidecar exits before ready', async () => {
+    const child = fakeChild()
+    const spawnRuntime = vi.fn(() => child)
+    const { LocalRuntimeManager } = await import('../local-runtime')
+    const manager = new LocalRuntimeManager({
+      userDataPath: root,
+      resourcesPath: root,
+      executablePath,
+      spawnRuntime: spawnRuntime as never,
+      fetchRuntime: vi.fn(),
+      createSecrets: () => ({
+        session_signing_secret: 'session',
+        vault_encryption_secret: 'vault',
+        desktop_bootstrap_token: 'desktop',
+        persistent_secret_storage: true,
+      }),
+      skipRuntimeVerification: true,
+      maxRestarts: 0,
+    })
+
+    const started = manager.start()
+    child.stderr.write('{"message":"renderer index is missing: /nope/renderer"}\n')
+    child.exitCode = 1
+    child.emit('exit', 1, null)
+
+    await expect(started).rejects.toThrow('harnessd exited before ready (1)')
+    await expect(started).rejects.toThrow('renderer index is missing: /nope/renderer')
+  })
+
   test('rejects traversal and symlinks in schema v2 runtime manifests', async () => {
     const resourcesPath = path.join(root, 'resources')
     const runtimeRoot = path.join(resourcesPath, 'runtime', process.platform, process.arch)
@@ -511,7 +632,19 @@ describe('managed local harnessd runtime', () => {
     fs.writeFileSync(nestedExecutable, 'onedir runtime')
     fs.symlinkSync(nestedExecutable, path.join(runtimeRoot, 'harnessd', 'linked-runtime'))
     writeV2Manifest(runtimeRoot, nestedExecutable, [nestedExecutable])
-    const manager = new LocalRuntimeManager({ userDataPath: root, resourcesPath, maxRestarts: 0 })
+    const child = fakeChild()
+    child.kill = vi.fn(() => {
+      child.exitCode = 0
+      queueMicrotask(() => child.emit('exit', 0, null))
+      return true
+    })
+    const manager = new LocalRuntimeManager({
+      userDataPath: root,
+      resourcesPath,
+      maxRestarts: 0,
+      shutdownTimeoutMs: 10,
+      spawnRuntime: vi.fn(() => child) as never,
+    })
     await expect(manager.start()).rejects.toThrow('symlink is not allowed')
   })
 })

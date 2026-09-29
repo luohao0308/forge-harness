@@ -50,7 +50,7 @@ export function ConfigDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/35 p-4 pt-[8vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/25 p-4 pt-[8vh] backdrop-blur-[2px]"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
@@ -62,9 +62,9 @@ export function ConfigDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
-        className={cn("w-full max-w-2xl overflow-hidden rounded-xl p-0 shadow-none", className)}
+        className={cn("glass-surface-strong bg-white/80 w-full max-w-2xl overflow-hidden rounded-2xl border p-0 shadow-glass", className)}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-6 py-5">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200/70 bg-transparent px-6 py-5">
           <div className="min-w-0">
             <div id={titleId} className="text-lg font-medium text-slate-950">{title}</div>
             {description ? <div id={descriptionId} className="mt-1 text-xs leading-5 text-slate-500">{description}</div> : null}

@@ -33,11 +33,11 @@ docs/development/ai/reference/architecture-and-decisions.md
 
 | 场景 | 文件 |
 |---|---|
-| 本地开发 | [local-development.md](../project-memory/runbooks/local-development.md) |
-| 部署 | [deployment.md](../project-memory/runbooks/deployment.md) |
-| 数据库迁移 | [migrations.md](../project-memory/runbooks/migrations.md) |
-| 回滚 | [rollback.md](../project-memory/runbooks/rollback.md) |
-| 排障 | [troubleshooting.md](../project-memory/runbooks/troubleshooting.md) |
+| 本地开发 | [local-development.md](../operations/runbooks/local-development.md) |
+| 部署 | [deployment.md](../operations/runbooks/deployment.md) |
+| 数据库迁移 | [migrations.md](../operations/runbooks/migrations.md) |
+| 回滚 | [rollback.md](../operations/runbooks/rollback.md) |
+| 排障 | [troubleshooting.md](../operations/runbooks/troubleshooting.md) |
 
 ## 质量与安全
 

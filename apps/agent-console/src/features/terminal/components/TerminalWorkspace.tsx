@@ -4,7 +4,9 @@ import { useTerminalStore } from '../../../stores/terminalStore'
 import { TerminalPane } from './TerminalPane'
 import { useTerminalKeyboardNav } from '../hooks/useTerminalKeyboardNav'
 import { ConsoleShell } from '../../../app/ConsoleShell'
+import { DesktopPageHeader } from '../../../components/desktop/DesktopPageHeader'
 import { isDesktopRuntime } from '../../../lib/desktop-bridge'
+import { SquareTerminal } from 'lucide-react'
 
 const WEB_TERMINAL_IDS = ['term-1', 'term-2', 'term-3', 'term-4'] as const
 const DESKTOP_TERMINAL_IDS = ['term-1'] as const
@@ -53,8 +55,15 @@ export function TerminalWorkspace() {
   if (desktop) {
     return (
       <ConsoleShell title="终端">
-        <div aria-label="Terminal workspace" className="h-full min-h-0 w-full bg-[#f7f7f8] p-3" role="region">
-          <TerminalPane id="term-1" appearance="integrated" />
+        <div className="flex min-h-0 flex-1 flex-col bg-ui-page">
+          <DesktopPageHeader
+            title="终端"
+            description="当前工作区的本地 Shell"
+            icon={SquareTerminal}
+          />
+          <div aria-label="Terminal workspace" className="min-h-0 w-full flex-1 bg-[#f7f7f8] p-2" role="region">
+            <TerminalPane id="term-1" appearance="integrated" />
+          </div>
         </div>
       </ConsoleShell>
     )

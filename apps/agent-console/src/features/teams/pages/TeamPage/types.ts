@@ -1,4 +1,5 @@
 import type { WorkspaceMode } from "../../../agents/lib/types";
+import type { PermissionMode, ReasoningEffort } from "../../../agents/lib/workspaceSettings";
 import type { ContextCompressionSummary } from "../../../agents/lib/contextCompression";
 import type {
   AgentMessage,
@@ -7,12 +8,18 @@ import type {
 } from "../../../tasks/api";
 import type { ConversationNode } from "../../../../stores/workspaceStore";
 
-export type TeamComposerState = { draft: string; target?: string; mode?: WorkspaceMode };
+export type TeamComposerState = {
+  draft: string;
+  target?: string;
+  mode?: WorkspaceMode;
+  reasoningEffort?: ReasoningEffort;
+  permissionMode?: PermissionMode;
+};
 export type TeamComposerStateUpdater =
   | TeamComposerState
   | ((current: TeamComposerState) => TeamComposerState);
 export type ComposerState = Record<string, TeamComposerState>;
-export type TeamBottomPanel = "settings" | "model" | "mcp" | null;
+export type TeamBottomPanel = "settings" | "model" | "permission" | "mcp" | null;
 export type TextFn = (zh: string, en: string) => string;
 export type TeamModelChangeHandler = (slotId: string, providerId: string, modelId: string) => void;
 export const MAX_TEAM_ATTACHMENT_TEXT_BYTES = 120_000;
@@ -42,6 +49,8 @@ export type PendingSend = {
   content: string;
   files: string[];
   mode: WorkspaceMode;
+  reasoningEffort: ReasoningEffort;
+  permissionMode: PermissionMode;
   recipientSlotIds: string[];
   anchorUserId?: string;
   branchAssistantId?: string;

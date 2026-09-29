@@ -68,7 +68,7 @@ describe("HelpCenterPage", () => {
     expect(await screen.findByRole("heading", { name: "专家模板" })).toBeInTheDocument();
     expect(screen.getByText(/子智能体模板/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "有帮助" }));
-    expect(screen.getByRole("button", { name: /有帮助/ })).toHaveClass("bg-slate-900");
+    expect(screen.getByRole("button", { name: /有帮助/ })).toHaveClass("bg-ui-ink");
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/help/subagents/specialists.md"));
   });
 });

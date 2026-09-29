@@ -15,6 +15,7 @@ const requiredDynamicSamples = [
   "/runs/run-enterprise/events",
   "/runs/run-enterprise/subagents",
   "/subagents/subagent-enterprise",
+  "/subagents/specialists/specialist-enterprise",
   "/subagent-specialists/specialist-enterprise",
   "/subagent-marketplace/listing-enterprise",
   "/observability/cost",
@@ -23,13 +24,19 @@ const requiredDynamicSamples = [
   "/settings/frontend-errors",
 ];
 
+const requiredCompatibilityPaths = [
+  "/settings/data",
+  "/subagents/specialists",
+  "/subagents/specialists/:specialistId",
+];
+
 describe("enterprise route inventory", () => {
   it("locks all left-sidebar links to routable static paths", () => {
     const routerPaths = routePathsFromRouter();
 
     expect(consoleNavEntries).toHaveLength(13);
-    expect(sidebarRouteInventory).toHaveLength(24);
-    expect(new Set(sidebarRouteInventory.map((item) => item.href)).size).toBe(24);
+    expect(sidebarRouteInventory).toHaveLength(25);
+    expect(new Set(sidebarRouteInventory.map((item) => item.href)).size).toBe(25);
     for (const item of sidebarRouteInventory) {
       expect(staticConsoleRoutePaths).toContain(item.href);
       expect(routerPaths).toContain(item.href);
@@ -54,6 +61,18 @@ describe("enterprise route inventory", () => {
       expect(item.sample).not.toMatch(/:[A-Za-z]/);
       expect(item.sample.startsWith("/")).toBe(true);
     }
+  });
+
+  it("keeps audited legacy URLs routed instead of falling into error or ID routes", () => {
+    const routerPaths = routePathsFromRouter();
+
+    for (const path of requiredCompatibilityPaths) {
+      expect(routerPaths).toContain(path);
+    }
+  });
+
+  it("keeps the desktop attention route registered", () => {
+    expect(routePathsFromRouter()).toContain("/attention");
   });
 });
 

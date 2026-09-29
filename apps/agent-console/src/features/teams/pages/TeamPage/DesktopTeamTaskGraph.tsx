@@ -331,9 +331,9 @@ export function DesktopTeamTaskGraph({
     <section
       role="region"
       aria-label={text("团队任务图", "Team task graph")}
-      className="flex h-full min-h-0 flex-col bg-slate-50/70"
+      className="flex h-full min-h-0 flex-col bg-ui-page"
     >
-      <header className="shrink-0 border-b border-slate-200 bg-white px-3 py-2.5">
+      <header className="glass-surface shrink-0 border-b border-ui-border/70 px-3 py-2.5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
@@ -411,7 +411,7 @@ export function DesktopTeamTaskGraph({
       </header>
 
       <div
-        className="min-h-0 flex-1 overflow-auto bg-slate-50"
+        className="min-h-0 flex-1 overflow-auto bg-ui-page"
         style={{
           backgroundImage: "radial-gradient(circle, #dbe3ee 1px, transparent 1px)",
           backgroundSize: "18px 18px",

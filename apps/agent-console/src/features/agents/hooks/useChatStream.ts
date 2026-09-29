@@ -464,6 +464,8 @@ export function useChatStream(args: UseChatStreamArgs): ChatStreamController {
         goal: input.goal,
         model_provider: selectedProviderId,
         model_name: selectedModelId,
+        reasoning_effort: store.reasoningEffort,
+        permission_mode: store.permissionMode,
         messages: serializeMessages(activePath),
         active_leaf_id: store.activeLeafId,
         run_id: input.runId,

@@ -94,9 +94,32 @@ describe("DesktopSettingsPage", () => {
 
   it("returns directly to the main workspace without an operation rail", () => {
     renderPage();
-    expect(screen.getByRole("link", { name: "返回应用" })).toHaveAttribute("href", "/agents/default/workspace");
+    expect(screen.getByRole("link", { name: "返回应用" }).getAttribute("href")).toMatch(
+      /^\/agents\/default\/workspace(?:\?conversation_id=.+)?$/,
+    );
     expect(screen.getByTestId("desktop-settings-space")).toBeInTheDocument();
     expect(screen.queryByTestId("desktop-operation-shell")).not.toBeInTheDocument();
+  });
+
+  it("preserves the source workspace across categories and secondary settings links", async () => {
+    renderPage(
+      "/desktop?section=general&return_to=%2Fagents%2Fresearch-agent%2Fworkspace%3Fconversation_id%3Dconv-7",
+    );
+
+    expect(screen.getByRole("link", { name: "返回应用" })).toHaveAttribute(
+      "href",
+      "/agents/research-agent/workspace?conversation_id=conv-7",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /终端/ }));
+    expect(screen.getByRole("link", { name: "返回应用" })).toHaveAttribute(
+      "href",
+      "/agents/research-agent/workspace?conversation_id=conv-7",
+    );
+    expect(screen.getByRole("link", { name: /打开终端工作区/ })).toHaveAttribute(
+      "href",
+      "/terminal?return_to=%2Fagents%2Fresearch-agent%2Fworkspace%3Fconversation_id%3Dconv-7",
+    );
   });
 
   it("confirms before deleting the model key and refreshes status", async () => {
@@ -153,6 +176,19 @@ describe("DesktopSettingsPage", () => {
     }));
     expect(document.querySelector('datalist#desktop-discovered-models option[value="model-alpha"]')).not.toBeNull();
     expect(document.querySelector('datalist#desktop-discovered-models option[value="model-beta"]')).not.toBeNull();
+  });
+
+  it("opens the model menu and applies a discovered model", async () => {
+    renderPage("/desktop?section=models");
+
+    await screen.findByDisplayValue("shipped-model");
+    await userEvent.click(screen.getByRole("button", { name: "获取模型列表" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "打开模型列表" })).toBeEnabled());
+    await userEvent.click(screen.getByRole("button", { name: "打开模型列表" }));
+    await userEvent.click(screen.getByRole("option", { name: "model-beta" }));
+
+    expect(screen.getByRole("combobox", { name: "默认模型" })).toHaveValue("model-beta");
+    expect(screen.queryByRole("listbox", { name: "可用模型" })).not.toBeInTheDocument();
   });
 
   it("saves a discovered model and backfills the returned configuration", async () => {

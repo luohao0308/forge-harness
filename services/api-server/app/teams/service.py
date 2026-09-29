@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import re
 from collections.abc import Iterable, Iterator, Mapping
@@ -69,6 +70,8 @@ VALID_AGENT_STATUSES = {"pending", "idle", "active", "completed", "failed"}
 VALID_TASK_STATUSES = {"pending", "in_progress", "completed", "deleted"}
 VALID_WORKSPACE_MODES = {"shared", "isolated"}
 VALID_MESSAGE_MODES = {"chat", "markdown_plan", "plan", "goal"}
+VALID_REASONING_EFFORTS = {"light", "medium", "high", "xhigh", "max"}
+VALID_PERMISSION_MODES = {"confirm", "auto-edit", "full-auto"}
 TERMINAL_GOAL_STATUSES = {"completed", "failed", "blocked"}
 SHUTDOWN_APPROVED = "shutdown_approved"
 SHUTDOWN_REJECTED_PREFIX = "shutdown_rejected"
@@ -773,12 +776,14 @@ class TeamSessionService:
                 mailbox_messages=mailbox_messages,
                 include_role_prompt=include_role_prompt,
             )
+            reasoning_effort = self._mailbox_reasoning_effort(mailbox_messages)
             deferred_wake_slot_ids: list[str] = []
             response, assistant_content, tool_results = self._run_team_model_turn(
                 team=team,
                 agent=agent,
                 dispatch_prompt=dispatch_prompt,
                 mailbox_messages=mailbox_messages,
+                reasoning_effort=reasoning_effort,
                 defer_message_wake=True,
                 deferred_wake_slot_ids=deferred_wake_slot_ids,
             )
@@ -795,6 +800,7 @@ class TeamSessionService:
                     "prompt_preview": dispatch_prompt[:500],
                     "model_provider": response.model_provider,
                     "model_name": response.model_name,
+                    "reasoning_effort": reasoning_effort,
                     "usage": response.usage,
                     "tool_results": tool_results,
                 },
@@ -993,11 +999,13 @@ class TeamSessionService:
                 mailbox_messages=mailbox_messages,
                 include_role_prompt=include_role_prompt,
             )
+            reasoning_effort = self._mailbox_reasoning_effort(mailbox_messages)
             stream = self._run_team_model_turn_stream(
                 team=team,
                 agent=agent,
                 dispatch_prompt=dispatch_prompt,
                 mailbox_messages=mailbox_messages,
+                reasoning_effort=reasoning_effort,
             )
             response: ModelResponse | None = None
             assistant_content = ""
@@ -1028,6 +1036,7 @@ class TeamSessionService:
                     "prompt_preview": dispatch_prompt[:500],
                     "model_provider": response.model_provider,
                     "model_name": response.model_name,
+                    "reasoning_effort": reasoning_effort,
                     "usage": response.usage,
                     "tool_results": tool_results,
                 },
@@ -1147,11 +1156,21 @@ class TeamSessionService:
         summary: str | None = None,
         files: list[str] | None = None,
         mode: str = "chat",
+        reasoning_effort: str = "high",
+        permission_mode: str = "confirm",
         wake_recipient: bool = True,
     ) -> TeamMailboxMessage:
         if mode not in VALID_MESSAGE_MODES:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="message mode 无效"
+            )
+        if reasoning_effort not in VALID_REASONING_EFFORTS:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="reasoning_effort 无效"
+            )
+        if permission_mode not in VALID_PERMISSION_MODES:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="permission_mode 无效"
             )
         team = self.get_team(team_id)
         recipient_slots = self._recipient_slots(team=team, target=target, sender=from_agent_slot_id)
@@ -1168,7 +1187,11 @@ class TeamSessionService:
                 summary=summary,
                 read=False,
                 files_json=list(files or []),
-                metadata_json={"workspace_mode": mode},
+                metadata_json={
+                    "workspace_mode": mode,
+                    "reasoning_effort": reasoning_effort,
+                    "permission_mode": permission_mode,
+                },
                 created_at=utc_now(),
             )
             self.session.add(message)
@@ -1228,7 +1251,9 @@ class TeamSessionService:
             self.session.execute(
                 select(AgentMessage)
                 .where(AgentMessage.session_id == agent.session_id)
-                .order_by(AgentMessage.created_at.asc(), AgentMessage.id.asc())
+                # Equal timestamps are valid for imported workspace paths. Keep
+                # database insertion order instead of scrambling ties by UUID.
+                .order_by(AgentMessage.created_at.asc())
                 .limit(limit)
             ).scalars()
         )
@@ -1866,6 +1891,15 @@ If you receive a message with type `shutdown_request`, the leader is asking you 
             return " [Mode: goal]"
         return ""
 
+    @staticmethod
+    def _mailbox_reasoning_effort(messages: list[TeamMailboxMessage]) -> str:
+        for message in reversed(messages):
+            metadata = message.metadata_json if isinstance(message.metadata_json, dict) else {}
+            value = metadata.get("reasoning_effort")
+            if value in VALID_REASONING_EFFORTS:
+                return str(value)
+        return "high"
+
     def create_task(
         self,
         *,
@@ -1913,6 +1947,7 @@ If you receive a message with type `shutdown_request`, the leader is asking you 
         *,
         team_id: str,
         task_id: str,
+        subject: str | None = None,
         status_value: str | None = None,
         owner_slot_id: str | None = None,
         update_owner: bool = False,
@@ -1921,6 +1956,18 @@ If you receive a message with type `shutdown_request`, the leader is asking you 
     ) -> TeamTask:
         team = self.get_team(team_id)
         task = self.get_task(team.id, task_id)
+        if subject is not None:
+            normalized_subject = subject.strip()
+            if not normalized_subject:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="任务名称不能为空"
+                )
+            if len(normalized_subject) > 240:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="任务名称不能超过 240 个字符",
+                )
+            task.subject = normalized_subject
         if status_value is not None:
             if status_value not in VALID_TASK_STATUSES:
                 raise HTTPException(
@@ -2571,13 +2618,17 @@ If you receive a message with type `shutdown_request`, the leader is asking you 
     ) -> list[AgentMessage]:
         session = self._ensure_agent_session(team=team, agent=agent)
         seeded: list[AgentMessage] = []
-        for raw in messages[:200]:
+        previous_created_at: datetime | None = None
+        for source_sequence, raw in enumerate(messages[:200]):
             role = str(raw.get("role") or "").strip()
             content = str(raw.get("content") or "").strip()
             if role not in {"user", "assistant", "system"} or not content:
                 continue
             metadata = raw.get("metadata_json") if isinstance(raw.get("metadata_json"), dict) else {}
             created_at = self._parse_seed_created_at(raw.get("created_at"))
+            if previous_created_at is not None and created_at <= previous_created_at:
+                created_at = previous_created_at + timedelta(microseconds=1)
+            previous_created_at = created_at
             message = AgentMessage(
                 session_id=session.id,
                 agent_id=agent.agent_id,
@@ -2587,6 +2638,7 @@ If you receive a message with type `shutdown_request`, the leader is asking you 
                     **metadata,
                     "team_id": team.id,
                     "source": "agent_workspace_import",
+                    "source_sequence": source_sequence,
                     "imported_by": self.actor_id,
                 },
                 created_at=created_at,
@@ -2644,6 +2696,7 @@ If you receive a message with type `shutdown_request`, the leader is asking you 
         agent: TeamAgent,
         dispatch_prompt: str,
         mailbox_messages: list[TeamMailboxMessage],
+        reasoning_effort: str = "high",
         defer_message_wake: bool = False,
         deferred_wake_slot_ids: list[str] | None = None,
     ) -> tuple[ModelResponse, str, list[dict]]:
@@ -2652,11 +2705,12 @@ If you receive a message with type `shutdown_request`, the leader is asking you 
             agent=agent,
             dispatch_prompt=dispatch_prompt,
         )
-        response = self.model_runtime.complete(
+        response = self._complete_team_model(
             organization_id=self.organization_id,
             model_provider=agent.model_provider,
             model_name=agent.model_name,
             messages=messages,
+            reasoning_effort=reasoning_effort,
         )
         if response.raw_response.get("mode") == "mock":
             return (
@@ -2721,11 +2775,12 @@ If you receive a message with type `shutdown_request`, the leader is asking you 
                     ),
                 ]
             )
-            response = self.model_runtime.complete(
+            response = self._complete_team_model(
                 organization_id=self.organization_id,
                 model_provider=agent.model_provider,
                 model_name=agent.model_name,
                 messages=messages,
+                reasoning_effort=reasoning_effort,
             )
             assistant_content = response.content
         return response, self._strip_team_tool_calls(assistant_content).strip(), tool_results
@@ -2737,6 +2792,7 @@ If you receive a message with type `shutdown_request`, the leader is asking you 
         agent: TeamAgent,
         dispatch_prompt: str,
         mailbox_messages: list[TeamMailboxMessage],
+        reasoning_effort: str = "high",
     ) -> Iterator[dict]:
         messages = self._build_model_messages(
             team=team,
@@ -2747,11 +2803,12 @@ If you receive a message with type `shutdown_request`, the leader is asking you 
         pending_delta = ""
         usage: dict = {}
         raw_response: dict = {}
-        for chunk in self.model_runtime.stream(
+        for chunk in self._stream_team_model(
             organization_id=self.organization_id,
             model_provider=agent.model_provider,
             model_name=agent.model_name,
             messages=messages,
+            reasoning_effort=reasoning_effort,
         ):
             if chunk.text:
                 assistant_content += chunk.text
@@ -2843,11 +2900,12 @@ If you receive a message with type `shutdown_request`, the leader is asking you 
                     ),
                 ]
             )
-            response = self.model_runtime.complete(
+            response = self._complete_team_model(
                 organization_id=self.organization_id,
                 model_provider=agent.model_provider,
                 model_name=agent.model_name,
                 messages=messages,
+                reasoning_effort=reasoning_effort,
             )
             assistant_content = response.content
             yield {"type": "delta", "content": self._strip_team_tool_calls(assistant_content)}
@@ -2859,6 +2917,56 @@ If you receive a message with type `shutdown_request`, the leader is asking you 
             "tool_results": tool_results,
             "follow_up_slot_ids": list(dict.fromkeys(deferred_wake_slot_ids)),
         }
+
+    @staticmethod
+    def _runtime_accepts_reasoning_effort(method: object) -> bool:
+        try:
+            parameters = inspect.signature(method).parameters.values()
+        except (TypeError, ValueError):
+            return True
+        return any(
+            parameter.name == "reasoning_effort"
+            or parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in parameters
+        )
+
+    def _complete_team_model(
+        self,
+        *,
+        organization_id: str,
+        model_provider: str,
+        model_name: str,
+        messages: list[ModelMessage],
+        reasoning_effort: str,
+    ) -> ModelResponse:
+        kwargs = {
+            "organization_id": organization_id,
+            "model_provider": model_provider,
+            "model_name": model_name,
+            "messages": messages,
+        }
+        if self._runtime_accepts_reasoning_effort(self.model_runtime.complete):
+            kwargs["reasoning_effort"] = reasoning_effort
+        return self.model_runtime.complete(**kwargs)
+
+    def _stream_team_model(
+        self,
+        *,
+        organization_id: str,
+        model_provider: str,
+        model_name: str,
+        messages: list[ModelMessage],
+        reasoning_effort: str,
+    ) -> Iterator:
+        kwargs = {
+            "organization_id": organization_id,
+            "model_provider": model_provider,
+            "model_name": model_name,
+            "messages": messages,
+        }
+        if self._runtime_accepts_reasoning_effort(self.model_runtime.stream):
+            kwargs["reasoning_effort"] = reasoning_effort
+        yield from self.model_runtime.stream(**kwargs)
 
     @staticmethod
     def _extract_team_tool_calls(content: str) -> list[dict]:

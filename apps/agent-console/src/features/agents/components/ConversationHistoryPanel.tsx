@@ -15,8 +15,18 @@
 
 import type { JSX } from "react";
 import { useMemo } from "react";
-import { ChevronLeft, ChevronRight, FolderOpen, MessageSquarePlus, Settings2, ShieldCheck, Terminal, Trash2, Users } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import {
+  ChevronLeft,
+  ChevronRight,
+  FolderOpen,
+  MessageSquarePlus,
+  Pin,
+  Pencil,
+  Search,
+  Settings2,
+  Trash2,
+} from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { isDesktopRuntime } from "../../../lib/desktop-bridge";
 import { useI18n } from "../../../lib/i18n";
@@ -33,7 +43,11 @@ export type ConversationHistoryPanelProps = {
   onNewConversation: () => void;
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (id: string) => void;
+  onRenameConversation?: (id: string) => void;
   onToggleCollapsed: () => void;
+  onOpenSearch?: () => void;
+  pinnedConversationIds?: string[];
+  onTogglePinnedConversation?: (id: string) => void;
 };
 
 export function ConversationHistoryPanel({
@@ -44,22 +58,23 @@ export function ConversationHistoryPanel({
   onNewConversation,
   onSelectConversation,
   onDeleteConversation,
+  onRenameConversation,
   onToggleCollapsed,
+  onOpenSearch,
+  pinnedConversationIds = [],
+  onTogglePinnedConversation,
 }: ConversationHistoryPanelProps): JSX.Element {
   const { text, isChinese } = useI18n();
-  const location = useLocation();
   const grouped = useMemo(
     () => groupConversations(
-      sortConversationsByUpdatedAt(conversations),
+      sortConversationsForSidebar(conversations, pinnedConversationIds),
       groupLabelForConversation ?? (() => text("当前智能体", "Current Agent")),
     ),
-    [conversations, groupLabelForConversation, text],
+    [conversations, groupLabelForConversation, pinnedConversationIds, text],
   );
   const locale = isChinese ? "zh-CN" : "en";
   const nowMs = Date.now();
   const desktop = isDesktopRuntime();
-  const desktopFilesPath = desktopPanelPath(location.pathname, location.search, "files");
-  const desktopApprovalsPath = desktopPanelPath(location.pathname, location.search, "approvals");
 
   const toggleLabel = collapsed
     ? text("展开历史对话", "Expand history")
@@ -69,14 +84,14 @@ export function ConversationHistoryPanel({
     return (
       <aside
         aria-label={text("历史对话", "Conversation history")}
-        className="flex w-12 shrink-0 flex-col items-center gap-2 border-r border-slate-200 bg-[#f7f7f8] py-3"
+        className="flex w-12 shrink-0 flex-col items-center gap-2 border-r border-ui-border bg-ui-sidebar py-3"
       >
         <button
           type="button"
           onClick={onToggleCollapsed}
           aria-label={toggleLabel}
           title={toggleLabel}
-          className="rounded-lg p-2 text-slate-600 transition-colors hover:bg-slate-200/70 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+          className="rounded-lg p-2 text-ui-muted transition-colors hover:bg-ui-selected hover:text-ui-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong"
         >
           <ChevronRight aria-hidden="true" className="h-4 w-4" />
         </button>
@@ -85,16 +100,23 @@ export function ConversationHistoryPanel({
           onClick={onNewConversation}
           aria-label={text("新建对话", "New conversation")}
           title={text("新建对话", "New conversation")}
-          className="rounded-lg p-2 text-slate-600 transition-colors hover:bg-slate-200/70 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+          className="rounded-lg p-2 text-ui-muted transition-colors hover:bg-ui-selected hover:text-ui-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong"
         >
           <MessageSquarePlus aria-hidden="true" className="h-4 w-4" />
         </button>
+        {onOpenSearch ? (
+          <button
+            type="button"
+            onClick={onOpenSearch}
+            aria-label={text("搜索任务", "Search tasks")}
+            title={text("搜索任务", "Search tasks")}
+            className="rounded-lg p-2 text-ui-muted transition-colors hover:bg-ui-selected hover:text-ui-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong"
+          >
+            <Search aria-hidden="true" className="h-4 w-4" />
+          </button>
+        ) : null}
         {desktop ? (
           <div className="mt-auto flex flex-col gap-1">
-            <DesktopUtilityLink to="/teams" label={text("团队", "Teams")} icon={<Users className="h-4 w-4" />} />
-            <DesktopUtilityLink to="/terminal" label={text("终端", "Terminal")} icon={<Terminal className="h-4 w-4" />} />
-            <DesktopUtilityLink to={desktopFilesPath} label={text("文件", "Files")} icon={<FolderOpen className="h-4 w-4" />} />
-            <DesktopUtilityLink to={desktopApprovalsPath} label={text("审批", "Approvals")} icon={<ShieldCheck className="h-4 w-4" />} />
             <DesktopUtilityLink to="/desktop" label={text("设置", "Settings")} icon={<Settings2 className="h-4 w-4" />} />
           </div>
         ) : null}
@@ -105,21 +127,32 @@ export function ConversationHistoryPanel({
   return (
     <aside
       aria-label={text("历史对话", "Conversation history")}
-      className="flex w-[280px] shrink-0 flex-col border-r border-slate-200 bg-[#f7f7f8] max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:z-30 max-md:shadow-none"
+      className="flex w-[280px] shrink-0 flex-col border-r border-ui-border bg-ui-sidebar max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:z-30 max-md:shadow-none"
     >
       {desktop ? (
         <header className="px-3 pb-2 pt-3">
           <div className="flex h-8 items-center gap-2 px-1">
-            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-slate-900 font-mono text-xs font-semibold text-white">
+            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-ui-ink font-mono text-xs font-semibold text-white">
               H
             </span>
-            <span className="text-sm font-semibold text-slate-900">Harness</span>
+            <span className="text-sm font-semibold text-ui-ink">Harness</span>
+            {onOpenSearch ? (
+              <button
+                type="button"
+                onClick={onOpenSearch}
+                aria-label={text("搜索任务", "Search tasks")}
+                title={text("搜索任务", "Search tasks")}
+                className="ml-auto rounded-md p-1.5 text-ui-muted transition-colors hover:bg-ui-selected hover:text-ui-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong"
+              >
+                <Search aria-hidden="true" className="h-4 w-4" />
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={onToggleCollapsed}
               aria-label={toggleLabel}
               title={toggleLabel}
-              className="ml-auto rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-200/70 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+              className="rounded-md p-1.5 text-ui-muted transition-colors hover:bg-ui-selected hover:text-ui-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong"
             >
               <ChevronLeft aria-hidden="true" className="h-4 w-4" />
             </button>
@@ -128,18 +161,18 @@ export function ConversationHistoryPanel({
             type="button"
             onClick={onNewConversation}
             aria-label={text("新建任务", "New task")}
-            className="mt-3 flex h-9 w-full items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+            className="mt-3 flex h-9 w-full items-center gap-2 rounded-md border border-ui-border-strong bg-ui-surface px-3 text-sm font-medium text-ui-ink transition-colors hover:bg-ui-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong"
           >
             <MessageSquarePlus aria-hidden="true" className="h-4 w-4" />
             <span>{text("新建任务", "New task")}</span>
           </button>
-          <div className="px-1 pb-1 pt-5 text-xs font-medium text-slate-500">
-            {text("任务", "Tasks")}
+          <div className="px-1 pb-1 pt-4 text-xs font-medium text-ui-muted">
+            {text("最近", "Recent")}
           </div>
         </header>
       ) : (
         <header className="flex items-center justify-between gap-2 px-2 py-3">
-          <span className="px-2 text-sm font-semibold text-slate-900">
+          <span className="px-2 text-sm font-semibold text-ui-ink">
             {text("历史对话", "History")}
           </span>
           <div className="flex items-center gap-1">
@@ -148,7 +181,7 @@ export function ConversationHistoryPanel({
               onClick={onNewConversation}
               aria-label={text("新建对话", "New conversation")}
               title={text("新建对话", "New conversation")}
-              className="inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-sm text-slate-800 transition-colors hover:bg-slate-200/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+              className="inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-sm text-ui-ink transition-colors hover:bg-ui-selected focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong"
             >
               <MessageSquarePlus aria-hidden="true" className="h-4 w-4" />
               <span>{text("新聊天", "New chat")}</span>
@@ -158,7 +191,7 @@ export function ConversationHistoryPanel({
               onClick={onToggleCollapsed}
               aria-label={toggleLabel}
               title={toggleLabel}
-              className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-200/70 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+              className="rounded-lg p-2 text-ui-muted transition-colors hover:bg-ui-selected hover:text-ui-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong"
             >
               <ChevronLeft aria-hidden="true" className="h-4 w-4" />
             </button>
@@ -167,15 +200,16 @@ export function ConversationHistoryPanel({
       )}
 
       {conversations.length === 0 ? (
-        <p className="px-3 py-6 text-center text-xs text-slate-500">
+        <p className="px-3 py-6 text-center text-xs text-ui-muted">
           {text("暂无历史对话", "No conversations yet")}
         </p>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
           {grouped.map((group) => (
             <section key={group.label} className="pt-3">
-              <div className="px-2 pb-1.5 text-xs font-semibold text-slate-700">
-                {group.label}
+              <div className="flex items-center gap-1.5 px-2 pb-1.5 text-xs font-semibold text-ui-muted">
+                <FolderOpen aria-hidden="true" className="h-3.5 w-3.5 text-ui-faint" />
+                <span className="truncate">{group.label}</span>
               </div>
               <ul className="flex flex-col gap-0.5">
                 {group.conversations.map((c) => {
@@ -192,7 +226,7 @@ export function ConversationHistoryPanel({
                       <div
                         className={cn(
                           "group flex items-center gap-1 rounded-lg transition-colors",
-                          active ? "bg-slate-200/80" : "hover:bg-slate-200/60",
+                          active ? "bg-ui-selected" : "hover:bg-ui-selected/70",
                         )}
                       >
                         <button
@@ -200,10 +234,47 @@ export function ConversationHistoryPanel({
                           onClick={() => onSelectConversation(c.id)}
                           aria-current={active ? "page" : undefined}
                           title={updatedLabel}
-                          className="flex min-w-0 flex-1 items-center rounded-lg px-2 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                          className="flex min-w-0 flex-1 items-center rounded-lg px-2 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong"
                         >
-                          <span className="truncate text-sm text-slate-800">{title}</span>
+                          <span className="truncate text-sm text-ui-ink">{title}</span>
                         </button>
+                        {onTogglePinnedConversation ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onTogglePinnedConversation(c.id);
+                            }}
+                            aria-label={pinnedConversationIds.includes(c.id)
+                              ? text("取消置顶", "Unpin conversation")
+                              : text("置顶对话", "Pin conversation")}
+                            title={pinnedConversationIds.includes(c.id)
+                              ? text("取消置顶", "Unpin conversation")
+                              : text("置顶对话", "Pin conversation")}
+                            className={cn(
+                              "mr-0.5 rounded-md p-1 opacity-0 transition-opacity focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong group-hover:opacity-100",
+                              pinnedConversationIds.includes(c.id)
+                                ? "text-ui-ink"
+                                : "text-ui-faint hover:bg-ui-surface/70 hover:text-ui-muted",
+                            )}
+                          >
+                            <Pin aria-hidden="true" className="h-3.5 w-3.5" />
+                          </button>
+                        ) : null}
+                        {onRenameConversation ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onRenameConversation(c.id);
+                            }}
+                            aria-label={text("重命名对话", "Rename conversation")}
+                            title={text("重命名对话", "Rename conversation")}
+                            className="mr-0.5 rounded-md p-1 text-ui-faint opacity-0 transition-opacity hover:bg-ui-surface/70 hover:text-ui-ink focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong group-hover:opacity-100"
+                          >
+                            <Pencil aria-hidden="true" className="h-3.5 w-3.5" />
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           onClick={(event) => {
@@ -212,7 +283,7 @@ export function ConversationHistoryPanel({
                           }}
                           aria-label={text("删除对话", "Delete conversation")}
                           title={text("删除对话", "Delete conversation")}
-                          className="mr-1 rounded-md p-1 text-slate-400 opacity-0 transition-opacity hover:bg-white/70 hover:text-red-500 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 group-hover:opacity-100"
+                          className="mr-1 rounded-md p-1 text-ui-faint opacity-0 transition-opacity hover:bg-ui-surface/70 hover:text-red-500 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong group-hover:opacity-100"
                         >
                           <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
                         </button>
@@ -226,11 +297,7 @@ export function ConversationHistoryPanel({
         </div>
       )}
       {desktop ? (
-        <nav aria-label={text("桌面快捷入口", "Desktop shortcuts")} className="border-t border-slate-200 p-2">
-          <DesktopUtilityLink to="/teams" label={text("团队", "Teams")} icon={<Users className="h-4 w-4" />} />
-          <DesktopUtilityLink to="/terminal" label={text("终端", "Terminal")} icon={<Terminal className="h-4 w-4" />} />
-          <DesktopUtilityLink to={desktopFilesPath} label={text("文件", "Files")} icon={<FolderOpen className="h-4 w-4" />} />
-          <DesktopUtilityLink to={desktopApprovalsPath} label={text("审批", "Approvals")} icon={<ShieldCheck className="h-4 w-4" />} />
+        <nav aria-label={text("桌面快捷入口", "Desktop shortcuts")} className="border-t border-ui-border p-2">
           <DesktopUtilityLink to="/desktop" label={text("设置", "Settings")} icon={<Settings2 className="h-4 w-4" />} />
         </nav>
       ) : null}
@@ -238,13 +305,22 @@ export function ConversationHistoryPanel({
   );
 }
 
-function desktopPanelPath(pathname: string, search: string, panel: "files" | "approvals"): string {
-  const workspacePath = /^\/agents\/[^/]+\/workspace$/.test(pathname)
-    ? pathname
-    : "/agents/default/workspace";
-  const params = new URLSearchParams(search);
-  params.set("desktop_panel", panel);
-  return `${workspacePath}?${params.toString()}`;
+function sortConversationsForSidebar(
+  conversations: ConversationSummary[],
+  pinnedConversationIds: string[],
+): ConversationSummary[] {
+  const pinned = new Set(pinnedConversationIds);
+  const pinOrder = new Map(pinnedConversationIds.map((id, index) => [id, index]));
+  return sortConversationsByUpdatedAt(conversations).sort((left, right) => {
+    const leftPinned = pinned.has(left.id);
+    const rightPinned = pinned.has(right.id);
+    if (leftPinned !== rightPinned) return leftPinned ? -1 : 1;
+    if (leftPinned && rightPinned) {
+      return (pinOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER)
+        - (pinOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER);
+    }
+    return 0;
+  });
 }
 
 function DesktopUtilityLink({
@@ -261,7 +337,7 @@ function DesktopUtilityLink({
       to={to}
       aria-label={label}
       title={label}
-      className="flex h-9 items-center gap-2 rounded-md px-2 text-sm text-slate-600 transition-colors hover:bg-slate-200/70 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+      className="flex h-9 items-center gap-2 rounded-md px-2 text-sm text-ui-muted transition-colors hover:bg-ui-selected hover:text-ui-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ui-border-strong"
     >
       <span aria-hidden="true" className="shrink-0">{icon}</span>
       <span className="truncate">{label}</span>

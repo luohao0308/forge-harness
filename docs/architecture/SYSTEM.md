@@ -75,9 +75,9 @@ _状态：active | 更新：2026-08-10 | 证据来源：README、Compose/CI、�
 
 | 故障 | 检测方式 | 降级/重试 | 恢复入口 |
 |---|---|---|---|
-| API/DB/Redis 未就绪 | readiness、容器日志、CI health loop | 阻止流量或 worker 启动，按 Compose/迁移顺序恢复 | [deployment](../project-memory/runbooks/deployment.md)、[troubleshooting](../project-memory/runbooks/troubleshooting.md) |
-| 模型/外部 provider 失败 | ModelCall 状态、错误分类、gateway logs | 保留失败证据；按允许策略重试/降级，不伪造 grounding | [web-research](../project-memory/runbooks/web-research.md) |
-| 工具/沙箱/worker 失败 | ToolCall/Event/job lease | fail closed、重试或 recovery worker；保留审计 | [migrations](../project-memory/runbooks/migrations.md)、[troubleshooting](../project-memory/runbooks/troubleshooting.md) |
+| API/DB/Redis 未就绪 | readiness、容器日志、CI health loop | 阻止流量或 worker 启动，按 Compose/迁移顺序恢复 | [deployment](../operations/runbooks/deployment.md)、[troubleshooting](../operations/runbooks/troubleshooting.md) |
+| 模型/外部 provider 失败 | ModelCall 状态、错误分类、gateway logs | 保留失败证据；按允许策略重试/降级，不伪造 grounding | [web-research](../operations/runbooks/web-research.md) |
+| 工具/沙箱/worker 失败 | ToolCall/Event/job lease | fail closed、重试或 recovery worker；保留审计 | [migrations](../operations/runbooks/migrations.md)、[troubleshooting](../operations/runbooks/troubleshooting.md) |
 | Desktop sidecar/IPC 失败 | native tests、renderer error boundary、startup report | 停止本地执行，保留 profile 数据并提示恢复 | [desktop](../development/desktop/README.md) |
 
 ## 9. 证据与未知项

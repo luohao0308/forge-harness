@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { Bot, BrainCircuit, Check, Database, FlaskConical, Gauge, GitBranch, Pencil, Play, RotateCcw, Search, Shield, Wrench, X } from "lucide-react";
+import { Bot, BrainCircuit, Check, Database, FlaskConical, Gauge, GitBranch, History, Pencil, Play, RotateCcw, Search, Shield, Wrench, X } from "lucide-react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { ConsoleShell } from "../../../app/ConsoleShell";
+import { DesktopPageHeader } from "../../../components/desktop/DesktopPageHeader";
 import { Badge, statusTone } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardHeader } from "../../../components/ui/card";
@@ -13,6 +14,8 @@ import { Input, Textarea } from "../../../components/ui/input";
 import { MenuSelect } from "../../../components/ui/menu-select";
 import { Table, Td, Th } from "../../../components/ui/table";
 import { TermHint } from "../../../components/ui/term";
+import { isDesktopRuntime } from "../../../lib/desktop-bridge";
+import { desktopOperationPath } from "../../../lib/desktop-navigation";
 import { useI18n } from "../../../lib/i18n";
 import { eventLabel, executionModeLabel, riskLabel, statusLabel } from "../../../lib/labels";
 import { formatShortDate } from "../../../lib/utils";
@@ -57,6 +60,7 @@ type ModifyApprovalDialogState = {
 
 export function RunDetailPage({ focus }: { focus?: "events" | "subagents" }) {
   const { text } = useI18n();
+  const desktop = isDesktopRuntime();
   const { runId } = useParams();
   const [searchParams] = useSearchParams();
   const retrievalSessionId = searchParams.get("retrieval_session_id") ?? undefined;
@@ -411,29 +415,44 @@ export function RunDetailPage({ focus }: { focus?: "events" | "subagents" }) {
     runId,
     agentId: run?.agent_id ?? null,
   });
+  const runHistoryPath = desktop
+    ? desktopOperationPath("/runs", backToWorkspacePath)
+    : "/runs";
   const subagentMetric = run ? `${data?.subagents.length ?? 0}/${run.max_subagents}` : "0/0";
 
   return (
     <ConsoleShell title={text("智能体运行", "Agent Run")}>
-      <div className="grid grid-cols-12 gap-4 p-4">
-        <section className="col-span-8 space-y-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {desktop ? (
+          <DesktopPageHeader
+            title={run?.title ?? text("加载运行...", "Loading Run...")}
+            description={run?.goal || text("运行详情与执行证据", "Run details and execution evidence")}
+            icon={History}
+            returnTo={backToWorkspacePath}
+            actions={run ? <Badge tone={statusTone(run.status)}>{statusLabel(run.status)}</Badge> : undefined}
+          />
+        ) : null}
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-4 xl:grid-cols-12">
+          <section className="space-y-4 xl:col-span-8">
           <Card className="p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Link to="/runs" className="text-xs text-slate-500 hover:text-slate-900">
-                    {text("运行历史", "Run History")}
-                  </Link>
-                  <span className="text-slate-300">/</span>
-                  <span className="font-mono text-xs text-slate-500">{run?.id.slice(0, 8) ?? "..."}</span>
+            {!desktop ? (
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Link to={runHistoryPath} className="text-xs text-slate-500 hover:text-slate-900">
+                      {text("运行历史", "Run History")}
+                    </Link>
+                    <span className="text-slate-300">/</span>
+                    <span className="font-mono text-xs text-slate-500">{run?.id.slice(0, 8) ?? "..."}</span>
+                  </div>
+                  <h1 className="mt-2 text-xl font-semibold text-slate-950">{run?.title ?? text("加载运行...", "Loading Run...")}</h1>
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{run?.goal}</p>
                 </div>
-                <h1 className="mt-2 text-xl font-semibold text-slate-950">{run?.title ?? text("加载运行...", "Loading Run...")}</h1>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{run?.goal}</p>
+                {run && <Badge tone={statusTone(run.status)}>{statusLabel(run.status)}</Badge>}
               </div>
-              {run && <Badge tone={statusTone(run.status)}>{statusLabel(run.status)}</Badge>}
-            </div>
+            ) : null}
             {run && (
-              <div className="mt-4 grid grid-cols-4 gap-2 text-xs">
+              <div className={desktop ? "grid grid-cols-2 gap-2 text-xs sm:grid-cols-4" : "mt-4 grid grid-cols-4 gap-2 text-xs"}>
                 <Metric label={text("模型", "Model")} value={`${run.model_provider}/${run.model_name}`} />
                 <Metric label="子代理" value={subagentMetric} />
                 <Metric label="沙箱" value={run.enable_sandbox ? "开启" : "关闭"} />
@@ -511,12 +530,14 @@ export function RunDetailPage({ focus }: { focus?: "events" | "subagents" }) {
                   </Button>
                 </div>
               )}
-              <Link to={backToWorkspacePath}>
-                <Button>
-                  <Bot className="h-3.5 w-3.5" />
-                  {text("回到工作台", "Back to Workspace")}
-                </Button>
-              </Link>
+              {!desktop ? (
+                <Link to={backToWorkspacePath}>
+                  <Button>
+                    <Bot className="h-3.5 w-3.5" />
+                    {text("回到工作台", "Back to Workspace")}
+                  </Button>
+                </Link>
+              ) : null}
               {primaryTraceId ? (
                 <Link to={`/observability/trace?trace_id=${encodeURIComponent(primaryTraceId)}`}>
                   <Button>
@@ -643,25 +664,39 @@ export function RunDetailPage({ focus }: { focus?: "events" | "subagents" }) {
                   <div className="space-y-2">
                     <div className="text-xs font-medium text-slate-700">引用</div>
                     <div className="space-y-2">
-                      {grounding.citations.map((citation) => (
-                        <div key={citation.id} className="rounded-md border border-slate-100 bg-white p-2 text-xs">
-                          <div className="flex items-center justify-between gap-2">
-                            <Badge tone="info">{citation.citation_key}</Badge>
-                            <span className="font-mono text-[11px] text-slate-500">
-                              {runDetailValueLabel(citation.source_kind)}
-                            </span>
+                      {grounding.citations.map((citation) => {
+                        const projectEvidence = projectCitationEvidence(citation.metadata_json);
+                        return (
+                          <div key={citation.id} className="rounded-md border border-slate-100 bg-white p-2 text-xs">
+                            <div className="flex items-center justify-between gap-2">
+                              <Badge tone="info">{citation.citation_key}</Badge>
+                              <span className="font-mono text-[11px] text-slate-500">
+                                {runDetailValueLabel(citation.source_kind)}
+                              </span>
+                            </div>
+                            <div className="mt-1 text-slate-600">
+                              命中: {citation.retrieval_hit_id}
+                            </div>
+                            <div className="mt-1 text-slate-500">
+                              {citation.web_source_id
+                                ? webSourcesById.get(citation.web_source_id)?.title ??
+                                  citation.web_source_id
+                                : hitsById.get(citation.retrieval_hit_id)?.snippet ?? citation.chunk_id}
+                            </div>
+                            {projectEvidence ? (
+                              <div className="mt-2 space-y-1 border-t border-slate-100 pt-2 font-mono text-[11px] text-slate-600">
+                                <div className="break-all">{projectEvidence.uri}</div>
+                                {projectEvidence.sha256 ? (
+                                  <div className="break-all">sha256:{projectEvidence.sha256}</div>
+                                ) : null}
+                                {projectEvidence.documentVersion ? (
+                                  <div>document-version:{projectEvidence.documentVersion}</div>
+                                ) : null}
+                              </div>
+                            ) : null}
                           </div>
-                          <div className="mt-1 text-slate-600">
-                            命中: {citation.retrieval_hit_id}
-                          </div>
-                          <div className="mt-1 text-slate-500">
-                            {citation.web_source_id
-                              ? webSourcesById.get(citation.web_source_id)?.title ??
-                                citation.web_source_id
-                              : hitsById.get(citation.retrieval_hit_id)?.snippet ?? citation.chunk_id}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -875,7 +910,7 @@ export function RunDetailPage({ focus }: { focus?: "events" | "subagents" }) {
           </div>
         </section>
 
-        <aside className="col-span-4 space-y-4">
+        <aside className="space-y-4 xl:col-span-4">
           <ReplayPanel
             latestSequence={latestSequence}
             replaySequence={replaySequence}
@@ -1033,6 +1068,7 @@ export function RunDetailPage({ focus }: { focus?: "events" | "subagents" }) {
             </div>
           </Card>
         </aside>
+        </div>
       </div>
       <ModifyToolApprovalDialog
         state={modifyApprovalDialog}
@@ -1484,6 +1520,47 @@ function adapterSnapshot(call: ToolCall): { slug: string; sha: string } | null {
 
 export function shortCapability(value?: string | null) {
   return value ? value.slice(0, 18) : "未提供";
+}
+
+export function projectCitationEvidence(metadata: Record<string, unknown>): {
+  uri: string;
+  sha256: string | null;
+  documentVersion: number | null;
+} | null {
+  const snapshot = metadata.source_snapshot;
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return null;
+  const source = snapshot as Record<string, unknown>;
+  const uri = safeProjectUri(source.project_uri, source.project_relative_path);
+  if (!uri) return null;
+  const sha256 = typeof source.project_file_sha256 === "string"
+    && /^[0-9a-f]{64}$/i.test(source.project_file_sha256)
+    ? source.project_file_sha256.toLowerCase()
+    : null;
+  const documentVersion = typeof source.document_version === "number"
+    && Number.isInteger(source.document_version)
+    && source.document_version > 0
+    ? source.document_version
+    : null;
+  return { uri, sha256, documentVersion };
+}
+
+function safeProjectUri(uriValue: unknown, pathValue: unknown): string | null {
+  const candidate = typeof uriValue === "string"
+    ? uriValue
+    : typeof pathValue === "string"
+      ? `project://${pathValue}`
+      : "";
+  if (!candidate.startsWith("project://")) return null;
+  const relativePath = candidate.slice("project://".length);
+  if (
+    !relativePath
+    || relativePath.startsWith("/")
+    || relativePath.includes("\\")
+    || relativePath.split("/").some((segment) => segment === "..")
+  ) {
+    return null;
+  }
+  return `project://${relativePath}`;
 }
 
 export function toolOutputSummary(call: ToolCall): string {

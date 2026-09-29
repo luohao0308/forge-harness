@@ -9,6 +9,7 @@ import type {
   LocalRuntimeModelDiscovery,
   LocalRuntimeModelDiscoveryInput,
   LocalRuntimeModelStatus,
+  DesktopWorkspaceAuthorization,
 } from '../preload-api'
 
 export type LocalRuntimeModelErrorCode =
@@ -47,6 +48,8 @@ export type LocalRuntimeEndpoint = HarnessdReadyHandshake & {
   rendererUrl: string
 }
 
+export type LocalRuntimeStartupDiagnostic = 'sidecar_spawned' | 'sidecar_ready'
+
 export type LocalRuntimePaths = {
   runtimeDataDir: string
   logDir: string
@@ -73,6 +76,7 @@ export type LocalRuntimeManagerOptions = {
   desktopSessionRenewalMs?: number
   desktopSessionRetryMs?: number
   onEndpoint?: (endpoint: LocalRuntimeEndpoint) => void | Promise<void>
+  onStartupDiagnostic?: (milestone: LocalRuntimeStartupDiagnostic) => void
   onUnavailable?: (error: Error) => void
   skipRuntimeVerification?: boolean
 }
@@ -102,7 +106,14 @@ export function shouldStartManagedLocalRuntime(): boolean {
 
 export function resolveLocalRuntimePaths(options: Pick<LocalRuntimeManagerOptions, 'userDataPath' | 'resourcesPath' | 'executablePath'> = {}): LocalRuntimePaths {
   const userDataPath = options.userDataPath || app.getPath('userData')
-  const resourcesPath = options.resourcesPath || process.resourcesPath || path.resolve(__dirname, '..', '..')
+  // Unpackaged (`electron .` from apps/desktop-app): process.resourcesPath points into
+  // node_modules/electron/dist, so default to the project's own resources/ tree and the
+  // renderer bundled next to the compiled main bundle instead of the missing bundle paths.
+  const useUnpackagedFallbacks = !app.isPackaged && !options.resourcesPath
+  const defaultResourcesPath = useUnpackagedFallbacks
+    ? path.resolve(__dirname, '..', '..', 'resources')
+    : process.resourcesPath || path.resolve(__dirname, '..', '..')
+  const resourcesPath = options.resourcesPath || defaultResourcesPath
   const executableName = process.platform === 'win32' ? 'harnessd.exe' : 'harnessd'
   const configuredExecutable = options.executablePath || process.env.HARNESSD_DEV_EXECUTABLE
   const runtimeRoot = configuredExecutable
@@ -113,11 +124,49 @@ export function resolveLocalRuntimePaths(options: Pick<LocalRuntimeManagerOption
     logDir: path.join(userDataPath, 'runtime', 'logs'),
     runtimeRoot,
     executablePath: configuredExecutable || resolveManifestExecutable(runtimeRoot, executableName),
-    staticDir: process.env.HARNESSD_STATIC_DIR || path.join(resourcesPath, 'renderer'),
+    staticDir: process.env.HARNESSD_STATIC_DIR
+      || (useUnpackagedFallbacks ? path.resolve(__dirname, '..', 'renderer') : path.join(resourcesPath, 'renderer')),
   }
 }
 
 export class LocalRuntimeManager {
+  async authorizeWorkspace(
+    profileId: string,
+    rootPath: string,
+  ): Promise<DesktopWorkspaceAuthorization> {
+    const endpoint = this.requireEndpoint()
+    const response = await this.options.fetchRuntime(
+      new URL('/api/local-runtime/workspace-authorization', endpoint.origin),
+      {
+        method: 'POST',
+        headers: this.bootstrapHeaders(true),
+        body: JSON.stringify({ profile_id: profileId, root_path: rootPath }),
+        redirect: 'error',
+      },
+    )
+    if (!response.ok) throw new Error(`workspace authorization failed: ${response.status}`)
+    const body = await response.json() as {
+      authorization?: unknown
+      label?: unknown
+      expires_at?: unknown
+    }
+    if (
+      typeof body.authorization !== 'string'
+      || !body.authorization
+      || typeof body.label !== 'string'
+      || !body.label
+      || typeof body.expires_at !== 'string'
+      || !body.expires_at
+    ) {
+      throw new Error('workspace authorization returned an invalid response')
+    }
+    return {
+      authorization: body.authorization,
+      label: body.label,
+      expiresAt: body.expires_at,
+    }
+  }
+
   private readonly options: Required<Pick<LocalRuntimeManagerOptions,
     'spawnRuntime' | 'fetchRuntime' | 'createSecrets' | 'startupTimeoutMs' | 'healthPollMs' |
     'shutdownTimeoutMs' | 'maxRestarts' | 'initialBackoffMs' | 'desktopSessionRenewalMs' |
@@ -129,6 +178,8 @@ export class LocalRuntimeManager {
   private restartTimer: ReturnType<typeof setTimeout> | null = null
   private secrets: LocalRuntimeBootstrapSecrets | null = null
   private expectedRuntime: { version: string; checksum: string } | null = null
+  private integrityCheck: Promise<void> | null = null
+  private integrityError: Error | null = null
   private desktopCookieSession: Electron.Session | null = null
   private desktopSessionRenewalTimer: ReturnType<typeof setTimeout> | null = null
   private desktopSessionGeneration = 0
@@ -165,15 +216,28 @@ export class LocalRuntimeManager {
   async start(): Promise<LocalRuntimeEndpoint> {
     this.stopping = false
     this.restartCount = 0
-    this.expectedRuntime = this.options.skipRuntimeVerification || process.env.HARNESSD_DEV_EXECUTABLE
-      ? null
-      : verifyPackagedRuntime(this.paths)
+    this.integrityError = null
+    if (this.options.skipRuntimeVerification || process.env.HARNESSD_DEV_EXECUTABLE) {
+      this.expectedRuntime = null
+      this.integrityCheck = null
+    } else {
+      const identity = verifyPackagedRuntimeIdentity(this.paths)
+      this.expectedRuntime = { version: identity.version, checksum: identity.checksum }
+      // The full onedir tree hash runs while the sidecar boots; startChild gates
+      // endpoint trust on it. Schema v1 manifests only cover the executable,
+      // which the identity phase already verified.
+      this.integrityCheck = identity.schema_version === 2
+        ? verifyPackagedRuntimeTree(this.paths, identity.manifest)
+        : null
+      this.integrityCheck?.catch(() => undefined)
+    }
     let lastError: Error | null = null
     for (let attempt = 0; attempt <= this.options.maxRestarts; attempt += 1) {
       try {
         return await this.startChild()
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error))
+        if (this.integrityError) break
         if (attempt >= this.options.maxRestarts || this.stopping) break
         await delay(this.options.initialBackoffMs * (2 ** attempt))
       }
@@ -299,8 +363,11 @@ export class LocalRuntimeManager {
       redirect: 'error',
     })
     if (!response.ok) throw new Error(`Web extension bootstrap failed: ${response.status}`)
-    const body = await response.json() as { token?: unknown }
-    if (typeof body.token !== 'string' || !body.token) throw new Error('Web extension bootstrap returned no token')
+    const body = await response.json() as { token?: unknown; expires_at?: unknown }
+    if (typeof body.token !== 'string' || !body.token) throw new Error('Web extension bootstrap returned no one-time code')
+    if (typeof body.expires_at !== 'string' || !body.expires_at) throw new Error('Web extension bootstrap returned no expiry')
+    const expiresAt = Date.parse(body.expires_at)
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) throw new Error('Web extension bootstrap code is expired')
     const url = `${endpoint.rendererUrl}#bootstrap=${encodeURIComponent(body.token)}`
     await shell.openExternal(url)
   }
@@ -340,21 +407,32 @@ export class LocalRuntimeManager {
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     })
-    // The packaged runtime logs to stderr. Leaving this pipe unread eventually
-    // blocks every request on Python's logging lock once the OS buffer fills.
-    child.stderr.resume()
+    this.emitStartupDiagnostic('sidecar_spawned')
+    // The runtime logs to stderr. Leaving this pipe unread eventually blocks every
+    // request on Python's logging lock once the OS buffer fills, so keep draining it
+    // into a bounded tail that startup failures can surface.
+    const stderrTail = createStderrTail()
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', stderrTail.append)
     this.child = child
-    const endpointPromise = this.waitForReady(child)
-    child.stdin.end(`${JSON.stringify({
-      protocol_version: 1,
-      runtime_data_dir: this.paths.runtimeDataDir,
-      ...this.secrets,
-    })}\n`)
+    const ready = this.waitForReady(child, stderrTail)
+    const integrityPromise = this.assertRuntimeIntegrity()
+    if (!child.stdin.writableEnded) {
+      child.stdin.end(`${JSON.stringify({
+        protocol_version: 1,
+        runtime_data_dir: this.paths.runtimeDataDir,
+        ...this.secrets,
+      })}\n`)
+    }
 
     try {
-      const endpoint = await endpointPromise
+      // Endpoint trust is granted only after BOTH the ready handshake and the
+      // full runtime tree integrity check succeed; either failing first aborts
+      // the child immediately.
+      const [endpoint] = await Promise.all([ready.promise, integrityPromise])
       this.assertRuntimeIdentity(endpoint)
       await this.pollHealth(endpoint, child)
+      this.emitStartupDiagnostic('sidecar_ready')
       verifiedRuntimeEndpoint = endpoint
       await this.options.onEndpoint?.(endpoint)
       child.once('exit', (code, signal) => this.handleUnexpectedExit(child, code, signal))
@@ -362,17 +440,33 @@ export class LocalRuntimeManager {
     } catch (error) {
       clearVerifiedRuntimeEndpoint()
       if (this.child === child) this.child = null
+      ready.dispose()
       await terminateChild(child, this.options.shutdownTimeoutMs)
       throw error
     }
   }
 
-  private waitForReady(child: ChildProcessWithoutNullStreams): Promise<LocalRuntimeEndpoint> {
-    return new Promise((resolve, reject) => {
+  private emitStartupDiagnostic(milestone: LocalRuntimeStartupDiagnostic): void {
+    try {
+      this.options.onStartupDiagnostic?.(milestone)
+    } catch {
+      // Startup diagnostics are observability only and cannot block runtime startup.
+    }
+  }
+
+  private waitForReady(child: ChildProcessWithoutNullStreams, stderrTail: StderrTail): {
+    promise: Promise<LocalRuntimeEndpoint>
+    dispose: () => void
+  } {
+    let finish!: (error?: Error, endpoint?: LocalRuntimeEndpoint) => void
+    const promise = new Promise<LocalRuntimeEndpoint>((resolve, reject) => {
       let stdoutBuffer = ''
       let readySeen = false
-      const timeout = setTimeout(() => finish(new Error('harnessd ready handshake timed out')), this.options.startupTimeoutMs)
-      const finish = (error?: Error, endpoint?: LocalRuntimeEndpoint) => {
+      const timeout = setTimeout(
+        () => finish(new Error(`harnessd ready handshake timed out: ${stderrTail.excerpt() || 'no stderr output'}`)),
+        this.options.startupTimeoutMs,
+      )
+      finish = (error?: Error, endpoint?: LocalRuntimeEndpoint) => {
         clearTimeout(timeout)
         child.stdout.off('data', onData)
         child.stdout.resume()
@@ -383,7 +477,8 @@ export class LocalRuntimeManager {
       }
       const onError = (error: Error) => finish(error)
       const onEarlyExit = (code: number | null, signal: NodeJS.Signals | null) => {
-        finish(new Error(`harnessd exited before ready (${code ?? signal ?? 'unknown'})`))
+        const detail = stderrTail.excerpt()
+        finish(new Error(`harnessd exited before ready (${code ?? signal ?? 'unknown'})${detail ? `: ${detail}` : ''}`))
       }
       const onData = (chunk: Buffer | string) => {
         stdoutBuffer += chunk.toString()
@@ -408,6 +503,12 @@ export class LocalRuntimeManager {
       child.once('error', onError)
       child.once('exit', onEarlyExit)
     })
+    return {
+      promise,
+      // Aborts a handshake that lost the race (e.g. integrity failure) so its
+      // timeout timer cannot keep the process alive for the full budget.
+      dispose: () => finish(),
+    }
   }
 
   private async pollHealth(endpoint: LocalRuntimeEndpoint, child: ChildProcessWithoutNullStreams): Promise<void> {
@@ -528,6 +629,19 @@ export class LocalRuntimeManager {
       throw new Error('harnessd ready version does not match the packaged runtime manifest')
     }
   }
+
+  private async assertRuntimeIntegrity(): Promise<void> {
+    const check = this.integrityCheck
+    if (!check) return
+    try {
+      await check
+    } catch (error) {
+      if (!this.integrityError) {
+        this.integrityError = error instanceof Error ? error : new Error(String(error))
+      }
+      throw this.integrityError
+    }
+  }
 }
 
 function validateModelStatus(value: unknown): LocalRuntimeModelStatus {
@@ -642,7 +756,7 @@ function assertExecutable(executablePath: string): void {
   if (!fs.existsSync(executablePath)) throw new Error(`packaged harnessd is missing: ${executablePath}`)
 }
 
-function verifyPackagedRuntime(paths: LocalRuntimePaths): { version: string; checksum: string } {
+function verifyPackagedRuntimeIdentity(paths: LocalRuntimePaths): { version: string; checksum: string; schema_version: 1 | 2; manifest: Record<string, unknown> } {
   const manifestPath = path.join(paths.runtimeRoot, 'runtime-manifest.json')
   let manifest: unknown
   try {
@@ -661,11 +775,50 @@ function verifyPackagedRuntime(paths: LocalRuntimePaths): { version: string; che
     || !/^[a-f0-9]{64}$/.test(manifest.sha256)) {
     throw new Error('packaged harnessd manifest schema is invalid')
   }
-  const checksum = manifest.schema_version === 2
-    ? verifyRuntimeTree(paths.runtimeRoot, manifest, manifestPath)
-    : hashFile(paths.executablePath)
-  if (checksum !== manifest.sha256) throw new Error('packaged harnessd checksum verification failed')
-  return { version: manifest.runtime_version, checksum }
+  // Pre-spawn phase: validate the manifest and the executable only. The full
+  // onedir tree hash runs concurrently with the sidecar boot and gates the
+  // endpoint trust boundary inside startChild.
+  if (hashFile(paths.executablePath) !== manifest.sha256) {
+    throw new Error('packaged harnessd checksum verification failed')
+  }
+  return {
+    version: manifest.runtime_version,
+    checksum: manifest.sha256,
+    schema_version: manifest.schema_version as 1 | 2,
+    manifest,
+  }
+}
+
+async function verifyPackagedRuntimeTree(paths: LocalRuntimePaths, manifest: Record<string, unknown>): Promise<void> {
+  if (!isRecord(manifest.files)) throw new Error('packaged harnessd manifest schema is invalid')
+  const expected = new Map<string, string>()
+  for (const [relativePath, checksum] of Object.entries(manifest.files)) {
+    if (typeof checksum !== 'string' || !/^[a-f0-9]{64}$/.test(checksum)) {
+      throw new Error('packaged harnessd manifest schema is invalid')
+    }
+    resolveRuntimePath(paths.runtimeRoot, relativePath)
+    expected.set(relativePath, checksum)
+  }
+  if (typeof manifest.executable !== 'string'
+    || expected.get(manifest.executable) !== manifest.sha256) {
+    throw new Error('packaged harnessd manifest schema is invalid')
+  }
+
+  const manifestPath = path.join(paths.runtimeRoot, 'runtime-manifest.json')
+  const actual = listRuntimeFiles(paths.runtimeRoot, manifestPath)
+  for (const relativePath of expected.keys()) {
+    if (!actual.has(relativePath)) throw new Error(`packaged harnessd file is missing: ${relativePath}`)
+  }
+  for (const relativePath of actual) {
+    if (!expected.has(relativePath)) throw new Error(`packaged harnessd file is not in the manifest: ${relativePath}`)
+  }
+  for (const [relativePath, checksum] of expected) {
+    const fileBuffer = await fs.promises.readFile(resolveRuntimePath(paths.runtimeRoot, relativePath))
+    const actualChecksum = createHash('sha256').update(fileBuffer).digest('hex')
+    if (actualChecksum !== checksum) {
+      throw new Error(`packaged harnessd checksum verification failed: ${relativePath}`)
+    }
+  }
 }
 
 function resolveManifestExecutable(runtimeRoot: string, fallbackName: string): string {
@@ -686,39 +839,6 @@ function resolveConfiguredRuntimeRoot(executablePath: string): string {
   const candidates = [executableDirectory, path.dirname(executableDirectory)]
   return candidates.find((candidate) => fs.existsSync(path.join(candidate, 'runtime-manifest.json')))
     || executableDirectory
-}
-
-function verifyRuntimeTree(runtimeRoot: string, manifest: Record<string, unknown>, manifestPath: string): string {
-  if (!isRecord(manifest.files)) throw new Error('packaged harnessd manifest schema is invalid')
-  const expected = new Map<string, string>()
-  for (const [relativePath, checksum] of Object.entries(manifest.files)) {
-    if (typeof checksum !== 'string' || !/^[a-f0-9]{64}$/.test(checksum)) {
-      throw new Error('packaged harnessd manifest schema is invalid')
-    }
-    resolveRuntimePath(runtimeRoot, relativePath)
-    expected.set(relativePath, checksum)
-  }
-  if (typeof manifest.executable !== 'string'
-    || expected.get(manifest.executable) !== manifest.sha256) {
-    throw new Error('packaged harnessd manifest schema is invalid')
-  }
-
-  const actual = listRuntimeFiles(runtimeRoot, manifestPath)
-  for (const relativePath of expected.keys()) {
-    if (!actual.has(relativePath)) throw new Error(`packaged harnessd file is missing: ${relativePath}`)
-  }
-  for (const relativePath of actual) {
-    if (!expected.has(relativePath)) throw new Error(`packaged harnessd file is not in the manifest: ${relativePath}`)
-  }
-  let executableChecksum = ''
-  for (const [relativePath, checksum] of expected) {
-    const actualChecksum = hashFile(resolveRuntimePath(runtimeRoot, relativePath))
-    if (actualChecksum !== checksum) {
-      throw new Error(`packaged harnessd checksum verification failed: ${relativePath}`)
-    }
-    if (relativePath === manifest.executable) executableChecksum = actualChecksum
-  }
-  return executableChecksum
 }
 
 function listRuntimeFiles(runtimeRoot: string, manifestPath: string): Set<string> {
@@ -760,6 +880,26 @@ function hashFile(filePath: string): string {
 function minimalRuntimeEnvironment(): NodeJS.ProcessEnv {
   const allowed = ['PATH', 'SystemRoot', 'WINDIR', 'TMP', 'TEMP', 'TMPDIR', 'LANG', 'LC_ALL']
   return Object.fromEntries(allowed.flatMap((key) => process.env[key] ? [[key, process.env[key]]] : []))
+}
+
+const STDERR_TAIL_MAX_LENGTH = 8_000
+const STDERR_TAIL_EXCERPT_LENGTH = 2_000
+
+type StderrTail = { append: (chunk: string) => void; excerpt: () => string }
+
+function createStderrTail(): StderrTail {
+  let buffer = ''
+  return {
+    append(chunk: string) {
+      buffer = chunk.length >= STDERR_TAIL_MAX_LENGTH
+        ? chunk.slice(-STDERR_TAIL_MAX_LENGTH)
+        : (buffer + chunk).slice(-STDERR_TAIL_MAX_LENGTH)
+    },
+    excerpt() {
+      const text = buffer.trim()
+      return text.length <= STDERR_TAIL_EXCERPT_LENGTH ? text : `…${text.slice(-STDERR_TAIL_EXCERPT_LENGTH)}`
+    },
+  }
 }
 
 function requireString(value: Record<string, unknown>, key: string): string {

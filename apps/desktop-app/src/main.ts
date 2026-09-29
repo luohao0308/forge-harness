@@ -6,6 +6,9 @@ import { recordDesktopStartupReport } from './services/desktop-telemetry'
 // Defer desktop-updates import to avoid module-level app.getVersion() call
 // import { checkForDesktopUpdates, registerDesktopUpdateHandlers } from './services/desktop-updates'
 import { registerFileHandlers } from './services/file-service'
+import { registerChangeReviewHandlers } from './services/change-review-service'
+import { registerGitWorktreeHandlers } from './services/git-worktree-service'
+import { registerVoiceComponentHandlers, setTrustedVoiceOrigin } from './services/voice-component-service'
 import { registerRendererWorkspaceStorageHandlers } from './services/renderer-workspace-storage'
 import { startDesktopOfflineSyncRuntime } from './services/offline-sync-runtime'
 import { registerPhase6Handlers } from './services/phase6-service'
@@ -27,7 +30,7 @@ import {
   loadVerifiedRuntimeInAllWindows,
   registerDesktopWindowHandlers,
 } from './services/window-manager'
-import { LocalRuntimeManager, shouldStartManagedLocalRuntime } from './services/local-runtime'
+import { LocalRuntimeManager, shouldStartManagedLocalRuntime, type LocalRuntimeStartupDiagnostic } from './services/local-runtime'
 import {
   registerLocalRuntimeSecretHandlers,
   setTrustedRuntimeSecretOrigin,
@@ -93,15 +96,23 @@ if (ownsSingleInstance) app.whenReady().then(async () => {
       onEndpoint: async (endpoint) => {
         setLocalRuntimeBaseUrl(endpoint.origin)
         setTrustedRuntimeSecretOrigin(endpoint.origin)
+        setTrustedVoiceOrigin(endpoint.origin)
         if (!mainWindow || mainWindow.isDestroyed()) return
         await localRuntimeManager?.installDesktopSession(mainWindow.webContents.session)
+        startupTracker.markDiagnostic('desktop_session_installed')
+        startupTracker.markDiagnostic('renderer_load_started')
         await loadVerifiedRuntimeInAllWindows()
+        startupTracker.markDiagnostic('renderer_load_completed')
         runtimeAttachedToWindow = true
+      },
+      onStartupDiagnostic: (milestone: LocalRuntimeStartupDiagnostic) => {
+        startupTracker.markDiagnostic(milestone)
       },
       onUnavailable: (error) => {
         console.error(`Harness local runtime unavailable: ${error.message}`)
         setLocalRuntimeBaseUrl(null)
         setTrustedRuntimeSecretOrigin(null)
+        setTrustedVoiceOrigin(null)
         void loadRecoveryRendererInAllWindows()
       },
     })
@@ -126,27 +137,47 @@ if (ownsSingleInstance) app.whenReady().then(async () => {
   registerEarlyProtocolHandlers()
 
   registerAgentHandlers()
-  registerFileHandlers()
+  registerFileHandlers({
+    authorizeWorkspace: async (profileId, rootPath) => {
+      const startupError = await runtimeStartup
+      if (startupError) throw startupError
+      if (!localRuntimeManager) throw new Error('managed local runtime is unavailable')
+      return localRuntimeManager.authorizeWorkspace(profileId, rootPath)
+    },
+  })
+  registerChangeReviewHandlers()
+  registerGitWorktreeHandlers()
+  registerVoiceComponentHandlers()
   registerRendererWorkspaceStorageHandlers()
   registerPhase6Handlers()
   registerTaskHandlers()
-  if (!managedLocalRuntime) {
-    startDesktopOfflineSyncRuntime()
-  }
+  // The offline runtime owns both sync scheduling and offline-agent IPC. It is
+  // safe to start in managed mode because registration/resources are local.
+  startDesktopOfflineSyncRuntime({ enableBackgroundSync: !managedLocalRuntime })
   registerDesktopWindowHandlers()
   registerSystemIntegration({
     getMainWindow: () => mainWindow,
     createMainWindow,
   })
 
-  // Dynamically import desktop-updates to avoid module-level app.getVersion() call
-  const { registerDesktopUpdateHandlers, checkForDesktopUpdates } = await import('./services/desktop-updates')
-  registerDesktopUpdateHandlers({
-    getMainWindow: () => mainWindow,
+  // Dynamically import desktop-updates off the startup critical path: the
+  // module graph is only needed for update checks, never for first paint.
+  const desktopUpdatesReady = import('./services/desktop-updates').then((module) => {
+    module.registerDesktopUpdateHandlers({
+      getMainWindow: () => mainWindow,
+    })
+    return module
+  })
+  desktopUpdatesReady.catch((error: unknown) => {
+    console.warn(`Forge Harness Desktop update handlers failed to register: ${
+      error instanceof Error ? error.message : String(error)
+    }`)
   })
 
   startupTracker.mark('services_ready')
+  if (!managedLocalRuntime) startupTracker.markDiagnostic('renderer_load_started')
   await createMainWindow({ deferInitialLoad: managedLocalRuntime })
+  if (!managedLocalRuntime) startupTracker.markDiagnostic('renderer_load_completed')
   registerLocalRuntimeSecretHandlers({
     getModelStatus: () => localRuntimeManager
       ? localRuntimeManager.getModelStatus()
@@ -177,7 +208,10 @@ if (ownsSingleInstance) app.whenReady().then(async () => {
       await loadRecoveryRendererInAllWindows()
     } else if (!runtimeAttachedToWindow && localRuntimeManager && mainWindow && !mainWindow.isDestroyed()) {
       await localRuntimeManager.installDesktopSession(mainWindow.webContents.session)
+      startupTracker.markDiagnostic('desktop_session_installed')
+      startupTracker.markDiagnostic('renderer_load_started')
       await loadVerifiedRuntimeInAllWindows()
+      startupTracker.markDiagnostic('renderer_load_completed')
     }
   }
   startupTracker.mark('renderer_loaded')
@@ -208,7 +242,7 @@ if (ownsSingleInstance) app.whenReady().then(async () => {
         console.warn(`Forge Harness Desktop startup telemetry failed: ${message}`)
   })
   if (app.isPackaged) {
-    void checkForDesktopUpdates()
+    void desktopUpdatesReady.then(({ checkForDesktopUpdates }) => checkForDesktopUpdates())
   }
 
   app.on('activate', () => {
@@ -240,6 +274,7 @@ app.on('before-quit', (event) => {
   localRuntimeManager = null
   setLocalRuntimeBaseUrl(null)
   setTrustedRuntimeSecretOrigin(null)
+  setTrustedVoiceOrigin(null)
   void runtime.stop().catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error)
     console.error(`Harness local runtime shutdown failed: ${message}`)

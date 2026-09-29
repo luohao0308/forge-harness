@@ -224,6 +224,57 @@ def test_team_message_normalizes_legacy_markdown_plan_mode() -> None:
     assert response.json()["metadata_json"]["workspace_mode"] == "markdown_plan"
 
 
+def test_team_message_persists_composer_controls_and_wake_uses_reasoning_effort(
+    db_session: Session,
+) -> None:
+    client = TestClient(app)
+    team = _create_team(client)
+    team_id = team["id"]
+    teammate = client.post(
+        f"/api/teams/{team_id}/agents",
+        headers=AUTH_HEADERS,
+        json={"agent_id": "default", "agent_name": "产品", "role": "teammate"},
+    ).json()
+
+    delivered = client.post(
+        f"/api/teams/{team_id}/messages",
+        headers=AUTH_HEADERS,
+        json={
+            "target": teammate["slot_id"],
+            "content": "请用最高推理强度处理",
+            "reasoning_effort": "max",
+            "permission_mode": "full-auto",
+        },
+    )
+    assert delivered.status_code == 201, delivered.text
+    assert delivered.json()["metadata_json"] == {
+        "workspace_mode": "chat",
+        "reasoning_effort": "max",
+        "permission_mode": "full-auto",
+    }
+
+    runtime = SequencedTeamRuntime(["已按最高强度处理。", "队员已完成处理。"])
+    service = TeamSessionService(
+        db_session,
+        organization_id=team["organization_id"],
+        actor_id="test",
+        model_runtime=runtime,
+    )
+    service.wake_agent(team_id=team_id, slot_id=teammate["slot_id"])
+
+    assert runtime.reasoning_efforts[0] == "max"
+    after_wake = client.get(f"/api/teams/{team_id}", headers=AUTH_HEADERS).json()
+    product = next(
+        agent for agent in after_wake["agents"] if agent["slot_id"] == teammate["slot_id"]
+    )
+    response_message = next(
+        message
+        for message in product["session_messages"]
+        if message["content"] == "已按最高强度处理。"
+    )
+    assert response_message["metadata_json"]["reasoning_effort"] == "max"
+
+
 def test_team_leader_prompt_auto_spawns_for_concrete_tasks(db_session: Session) -> None:
     client = TestClient(app)
     team = _create_team(client)
@@ -342,9 +393,13 @@ def test_team_create_seeds_leader_session_without_mailbox_unread(
         "workspace_node_id": "node-1",
         "team_id": team["id"],
         "source": "agent_workspace_import",
+        "source_sequence": 0,
         "imported_by": "dev-engineer",
     }
     assert leader["session_messages"][1]["metadata_json"]["source_run_id"] == "run-seeded-1"
+    assert leader["session_messages"][1]["metadata_json"]["source_sequence"] == 1
+    assert leader["session_messages"][0]["created_at"].endswith("Z")
+    assert leader["session_messages"][1]["created_at"].endswith("Z")
 
     persisted = db_session.execute(
         select(AgentMessage)
@@ -364,6 +419,34 @@ def test_team_create_seeds_leader_session_without_mailbox_unread(
     ]
     assert len(session_events) == 1
     assert session_events[0]["payload_json"]["slot_id"] == "leader"
+
+
+def test_team_create_preserves_seed_path_order_when_timestamps_are_equal(
+    db_session: Session,
+) -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/api/teams",
+        headers=AUTH_HEADERS,
+        json={
+            "name": "Equal Timestamp Team",
+            "leader_agent_id": "default",
+            "seed_messages": [
+                {"role": "user", "content": "先提问", "created_at": "2026-08-29T06:27:11.741Z"},
+                {
+                    "role": "assistant",
+                    "content": "后回答",
+                    "created_at": "2026-08-29T06:27:11.741Z",
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    messages = response.json()["agents"][0]["session_messages"]
+    assert [message["content"] for message in messages] == ["先提问", "后回答"]
+    assert messages[0]["created_at"] < messages[1]["created_at"]
+    assert [message["metadata_json"]["source_sequence"] for message in messages] == [0, 1]
 
 
 def test_team_agents_mailbox_leader_entrypoint_and_read_flow(db_session: Session) -> None:
@@ -1306,11 +1389,12 @@ def test_team_tasks_dependencies_and_sse_projection() -> None:
         },
     )
     assert dependent.status_code == 201
-    assert dependent.json()["blocked_by_json"] == [upstream_task["id"]]
+    dependent_task = dependent.json()
+    assert dependent_task["blocked_by_json"] == [upstream_task["id"]]
 
     tasks = client.get(f"/api/teams/{team_id}/tasks", headers=AUTH_HEADERS).json()
     upstream_with_blocks = next(task for task in tasks if task["id"] == upstream_task["id"])
-    assert dependent.json()["id"] in upstream_with_blocks["blocks_json"]
+    assert dependent_task["id"] in upstream_with_blocks["blocks_json"]
 
     completed = client.patch(
         f"/api/teams/{team_id}/tasks/{upstream_task['id']}",
@@ -1318,8 +1402,21 @@ def test_team_tasks_dependencies_and_sse_projection() -> None:
         json={"status": "completed"},
     )
     assert completed.status_code == 200
+    renamed = client.patch(
+        f"/api/teams/{team_id}/tasks/{dependent_task['id']}",
+        headers=AUTH_HEADERS,
+        json={"subject": "  实现玻璃化任务板  "},
+    )
+    assert renamed.status_code == 200
+    assert renamed.json()["subject"] == "实现玻璃化任务板"
+    invalid_rename = client.patch(
+        f"/api/teams/{team_id}/tasks/{dependent_task['id']}",
+        headers=AUTH_HEADERS,
+        json={"subject": "   "},
+    )
+    assert invalid_rename.status_code == 422
     tasks_after = client.get(f"/api/teams/{team_id}/tasks", headers=AUTH_HEADERS).json()
-    dependent_after = next(task for task in tasks_after if task["id"] == dependent.json()["id"])
+    dependent_after = next(task for task in tasks_after if task["id"] == dependent_task["id"])
     assert dependent_after["blocked_by_json"] == []
 
     stream = client.get(f"/api/teams/{team_id}/stream?once=true", headers=AUTH_HEADERS)
@@ -1564,6 +1661,7 @@ class SequencedTeamRuntime:
     def __init__(self, contents: list[str]) -> None:
         self.contents = contents
         self.calls: list[list[ModelMessage]] = []
+        self.reasoning_efforts: list[str | None] = []
 
     def complete(
         self,
@@ -1572,8 +1670,10 @@ class SequencedTeamRuntime:
         model_provider: str,
         model_name: str,
         messages: list[ModelMessage],
+        reasoning_effort: str | None = None,
     ) -> ModelResponse:
         self.calls.append(messages)
+        self.reasoning_efforts.append(reasoning_effort)
         content = self.contents.pop(0)
         return ModelResponse(
             content=content,
@@ -1590,12 +1690,14 @@ class SequencedTeamRuntime:
         model_provider: str,
         model_name: str,
         messages: list[ModelMessage],
+        reasoning_effort: str | None = None,
     ):
         response = self.complete(
             organization_id=organization_id,
             model_provider=model_provider,
             model_name=model_name,
             messages=messages,
+            reasoning_effort=reasoning_effort,
         )
         midpoint = max(1, len(response.content) // 2)
         yield ModelStreamChunk(text=response.content[:midpoint])

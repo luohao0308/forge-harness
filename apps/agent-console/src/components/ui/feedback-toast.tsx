@@ -61,7 +61,7 @@ export function FeedbackToastViewport() {
   if (items.length === 0) return null;
 
   return (
-    <div className="pointer-events-none fixed right-4 top-4 z-[80] flex w-[min(28rem,calc(100vw-2rem))] flex-col gap-2">
+    <div className="pointer-events-none fixed right-3 top-3 z-[80] flex w-[min(22rem,calc(100vw-1.5rem))] flex-col gap-2">
       {items.map((item) => {
         const icon =
           item.tone === "success" ? (
@@ -78,7 +78,7 @@ export function FeedbackToastViewport() {
           <div
             key={item.id}
             className={cn(
-              "pointer-events-auto rounded-xl border px-4 py-3 shadow-none",
+              "pointer-events-auto rounded-lg border px-3 py-2.5 shadow-[0_8px_24px_rgba(36,36,40,0.08)]",
               item.tone === "success" && "border-emerald-200 bg-emerald-50/95 text-emerald-900",
               item.tone === "error" && "border-red-200 bg-red-50/95 text-red-900",
               item.tone === "warning" && "border-amber-200 bg-amber-50/95 text-amber-900",
@@ -87,12 +87,12 @@ export function FeedbackToastViewport() {
             role="status"
             aria-live="polite"
           >
-            <div className="flex items-start gap-3">
+            <div className="flex items-start gap-2.5">
               <div className="mt-0.5 shrink-0">{icon}</div>
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold">{item.title}</div>
+                <div className="text-[13px] font-semibold leading-5">{item.title}</div>
                 {item.description ? (
-                  <div className="mt-1 text-xs leading-5 opacity-90">{item.description}</div>
+                  <div className="mt-0.5 line-clamp-3 text-xs leading-4 opacity-90">{item.description}</div>
                 ) : null}
               </div>
               <button

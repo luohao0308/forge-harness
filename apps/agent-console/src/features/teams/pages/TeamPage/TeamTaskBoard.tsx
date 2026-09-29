@@ -1,4 +1,4 @@
-import { ClipboardList, X } from "lucide-react";
+import { ClipboardList, Pencil, X } from "lucide-react";
 
 import { Badge } from "../../../../components/ui/badge";
 import { cn } from "../../../../lib/utils";
@@ -13,12 +13,14 @@ export function TeamTaskBoard({
   tasks,
   text,
   onClose,
+  onRenameTask,
 }: {
   team: Team;
   agents: TeamAgent[];
   tasks: TeamTask[];
   text: TextFn;
   onClose: () => void;
+  onRenameTask: (task: TeamTask) => void;
 }) {
   const agentNames = new Map(agents.map((agent) => [agent.slot_id, agent.agent_name]));
   const statuses: TeamTask["status"][] = ["pending", "in_progress", "completed"];
@@ -28,9 +30,9 @@ export function TeamTaskBoard({
     <div
       role="dialog"
       aria-label={text("团队任务板", "Team task board")}
-      className="absolute right-1 top-full z-40 mt-2 w-[min(360px,calc(100vw-1rem))] overflow-hidden rounded-lg border border-slate-200 bg-white text-left shadow-none"
+      className="glass-surface-strong absolute right-1 top-full z-40 mt-2 w-[min(360px,calc(100vw-1rem))] overflow-hidden rounded-2xl border border-ui-border/70 text-left shadow-glass"
     >
-      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-ui-border/70 px-3 py-2">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-950">
             <ClipboardList className="h-4 w-4" />
@@ -43,14 +45,14 @@ export function TeamTaskBoard({
           type="button"
           aria-label={text("关闭任务板", "Close task board")}
           onClick={onClose}
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-950"
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-ui-muted hover:bg-ui-subtle hover:text-ui-ink"
         >
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
       <div className="max-h-[64vh] overflow-auto px-3 py-2">
         {visibleTasks.length === 0 ? (
-          <div className="rounded-md border border-dashed border-slate-200 bg-slate-50/60 px-3 py-6 text-center text-xs text-slate-500">
+          <div className="rounded-xl border border-dashed border-ui-border/80 bg-ui-subtle/60 px-3 py-6 text-center text-xs text-ui-muted">
             {text("暂无团队任务", "No team tasks yet")}
           </div>
         ) : (
@@ -66,7 +68,7 @@ export function TeamTaskBoard({
                     </div>
                     <Badge tone={teamTaskStatusTone(status)}>{scopedTasks.length}</Badge>
                   </div>
-                  <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+                  <div className="glass-surface overflow-hidden rounded-xl border border-ui-border/70">
                     {scopedTasks.map((task, index) => (
                       <div
                         key={task.id}
@@ -78,9 +80,18 @@ export function TeamTaskBoard({
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5">
-                              <div className="truncate text-xs font-medium text-slate-900">
+                              <div className="min-w-0 flex-1 truncate text-xs font-medium text-slate-900">
                                 {task.subject}
                               </div>
+                              <button
+                                type="button"
+                                onClick={() => onRenameTask(task)}
+                                aria-label={text("重命名任务", "Rename task")}
+                                title={text("重命名任务", "Rename task")}
+                                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                              >
+                                <Pencil aria-hidden="true" className="h-3 w-3" />
+                              </button>
                               {task.metadata_json?.needs_correction ? (
                                 <Badge tone="warning">{text("需纠偏", "Needs fix")}</Badge>
                               ) : null}

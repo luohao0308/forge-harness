@@ -3698,6 +3698,9 @@ def test_local_agent_full_flow_streams_tools_and_observability_like_platform_mod
     assert gateway_requests[0]["request_metadata"] == {
         "source": "local_agent_bridge_stream",
         "local_bridge_task_id": task["id"],
+        "reasoning_effort_requested": "high",
+        "permission_mode_requested": "confirm",
+        "permission_mode_effective": "confirm",
     }
     assert gateway_requests[0]["model_provider"] == "deepseek"
     assert gateway_requests[0]["model_name"] == "deepseek-v4"
@@ -3745,7 +3748,12 @@ def test_local_agent_full_flow_streams_tools_and_observability_like_platform_mod
     direct_platform_run_id = platform_done["data"]["run_id"]
     assert direct_platform_run_id != sent_payload["run_id"]
     assert direct_platform_model_call_id
-    assert gateway_requests[1]["request_metadata"] is None
+    assert gateway_requests[1]["request_metadata"] == {
+        "source": "workspace_chat",
+        "reasoning_effort_requested": "high",
+        "permission_mode_requested": "confirm",
+        "permission_mode_effective": "confirm",
+    }
     assert gateway_requests[1]["model_provider"] == "deepseek"
     assert gateway_requests[1]["model_name"] == "deepseek-v4"
 
@@ -3758,7 +3766,7 @@ def test_local_agent_full_flow_streams_tools_and_observability_like_platform_mod
     assert direct_model_call_payload["id"] == direct_platform_model_call_id
     assert direct_model_call_payload["model_provider"] == "deepseek"
     assert direct_model_call_payload["model_name"] == "deepseek-v4"
-    assert "source" not in direct_model_call_payload["request_json"]
+    assert direct_model_call_payload["request_json"]["source"] == "workspace_chat"
     assert direct_model_call_payload["response_json"]["content_preview"] == "平台 SSE 回复"
 
     for index, content in enumerate(["本地 ", "SSE 回复"], start=1):
@@ -4340,7 +4348,9 @@ def test_normal_token_cannot_mark_local_bridge_stream_model_call_metadata(
 
     assert response.status_code == 200, response.text
     assert "普通登录流式输出" in response.text
-    assert gateway_kwargs.get("request_metadata") is None
+    marked_metadata = gateway_kwargs.get("request_metadata") or {}
+    assert marked_metadata.get("source") == "workspace_chat"
+    assert "local_bridge_task_id" not in marked_metadata
 
 
 def test_local_agent_scoped_stream_token_rejects_terminal_bridge_task_replay(

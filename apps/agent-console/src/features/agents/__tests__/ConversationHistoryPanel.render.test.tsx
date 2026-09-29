@@ -72,6 +72,7 @@ describe("ConversationHistoryPanel", () => {
 
   it("adds only the essential task and utility navigation in desktop runtime", () => {
     window.desktopApi = {};
+    const onOpenSearch = vi.fn();
 
     render(
       <MemoryRouter initialEntries={["/agents/default/workspace"]}>
@@ -83,23 +84,55 @@ describe("ConversationHistoryPanel", () => {
           onSelectConversation={vi.fn()}
           onDeleteConversation={vi.fn()}
           onToggleCollapsed={vi.fn()}
+          onOpenSearch={onOpenSearch}
         />
       </MemoryRouter>,
     );
 
     expect(screen.getByText("Harness")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "新建任务" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "团队" })).toHaveAttribute("href", "/teams");
-    expect(screen.getByRole("link", { name: "终端" })).toHaveAttribute("href", "/terminal");
-    expect(screen.getByRole("link", { name: "文件" })).toHaveAttribute(
-      "href",
-      "/agents/default/workspace?desktop_panel=files",
-    );
-    expect(screen.getByRole("link", { name: "审批" })).toHaveAttribute(
-      "href",
-      "/agents/default/workspace?desktop_panel=approvals",
-    );
+    expect(screen.getByRole("button", { name: "搜索任务" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "待处理" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "运行历史" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "工具与插件" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "团队" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "终端" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "文件" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "审批" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "设置" })).toHaveAttribute("href", "/desktop");
     expect(screen.queryByText("Dashboard")).not.toBeInTheDocument();
+
+    screen.getByRole("button", { name: "搜索任务" }).click();
+    expect(onOpenSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps pinned conversations first and exposes an accessible toggle", async () => {
+    window.desktopApi = {};
+    const user = userEvent.setup();
+    const onTogglePinnedConversation = vi.fn();
+
+    render(
+      <MemoryRouter initialEntries={["/agents/default/workspace"]}>
+        <ConversationHistoryPanel
+          collapsed={false}
+          conversations={[
+            conversation("recent", "Recent task", "2026-05-11T20:10:00Z"),
+            conversation("pinned", "Pinned task", "2026-05-11T20:00:00Z"),
+          ]}
+          currentConversationId="recent"
+          onNewConversation={vi.fn()}
+          onSelectConversation={vi.fn()}
+          onDeleteConversation={vi.fn()}
+          onToggleCollapsed={vi.fn()}
+          pinnedConversationIds={["pinned"]}
+          onTogglePinnedConversation={onTogglePinnedConversation}
+        />
+      </MemoryRouter>,
+    );
+
+    const entries = screen.getAllByRole("button", { name: /task/ });
+    expect(entries[0]).toHaveAccessibleName("Pinned task");
+    await user.click(screen.getByRole("button", { name: "取消置顶" }));
+    expect(onTogglePinnedConversation).toHaveBeenCalledWith("pinned");
   });
 });

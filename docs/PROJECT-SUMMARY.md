@@ -1,6 +1,6 @@
 # 项目摘要（AI 快速参考）
 
-_来源：代码、配置、CI、产品规格和已记录验证证据 | 状态：ready | 更新：2026-08-10_
+_来源：代码、配置、CI、产品规格和已记录验证证据 | 状态：ready | 更新：2026-08-17_
 
 > 本文件只保存稳定的项目事实和路径速查，不记录实时任务、临时验证、交接过程或历史证据。当前任务状态以 `TASKS.md` 为准，短期上下文以 `WORKING-CONTEXT.md` 为准。
 
@@ -40,22 +40,22 @@ Forge Harness 是一个私有部署的企业 AI 控制面，把基础模型包�
 | Knowledge / Context | `services/api-server/app/knowledge/`、`app/context/` | 文档、检索、记忆、上下文 manifest 和 grounding | 证据必须带来源、策略和 Run 绑定 | 本地证据不足时不能伪造已验证结论 |
 | Tools / MCP / Sandbox | `services/api-server/app/tools/`、`app/sandbox/` | Capability Registry、ToolRunner、策略、沙箱和 WarmPool | 工具执行经过 Policy、Audit、Event | 无 Agent capability attachment 时 fail closed |
 | API / Data / Events | `services/api-server/app/api/`、`app/db/`、`app/events/`、`alembic/` | HTTP、SQLAlchemy、事件溯源、迁移和回放 | API/OpenAPI 与迁移必须同步验证 | PostgreSQL 是生产数据库路径 |
-| Console / Desktop / Mobile | `apps/agent-console/`、`apps/desktop-app/`、`apps/mobile-app/` | 浏览器控制台、桌面工作区、移动同步 | 前端状态来自 API/本地运行时，不放静态业务数据 | 浏览器保留完整数据和观测控制台 |
+| Console / Desktop / Mobile | `apps/agent-console/`、`apps/desktop-app/`、`apps/mobile-app/` | 浏览器控制台、桌面工作区、移动同步 | 前端状态来自 API/本地运行时，不放静态业务数据 | Desktop `/attention` 聚合服务器与本地待处理状态；`/changes` 通过受控 Git IPC、预览 identity 和服务器审计处理本地变更；浏览器保留完整数据和观测控制台 |
 
 ## 5. 开发、验证与交付入口
 
 | 目的 | 命令或入口 | 适用范围 | 证据/备注 |
 |---|---|---|---|
-| 本地启动 | `docker compose -f compose.production.yml up -d --build`；桌面 `cd apps/desktop-app && npm run start` | 私有栈/桌面 | 详见 [runbooks/local-development.md](project-memory/runbooks/local-development.md)；动态端口先查配置 |
+| 本地启动 | `docker compose -f compose.production.yml up -d --build`；桌面 `cd apps/desktop-app && npm run start` | 私有栈/桌面 | 详见 [runbooks/local-development.md](operations/runbooks/local-development.md)；动态端口先查配置 |
 | 定向测试 | `cd services/api-server && .venv/bin/python -m pytest tests/<target>.py`；`cd apps/agent-console && npm test -- <pattern>` | API/Console 局部变更 | 证据写入 `docs/工作日志/` 或当前会话 wiki |
 | 全量验证 | `cd services/api-server && .venv/bin/python -m pytest tests`；Console `npm run lint && npm run build` | 发布、高风险或跨模块变更 | 需要 PostgreSQL/Redis 的测试按 CI 或本地容器执行 |
 | 构建/打包 | `cd apps/agent-console && npm run build`；`cd apps/desktop-app && npm run build`；`python3 scripts/generate-api-docs.py` | 前端、桌面和 OpenAPI 产物 | 产物身份使用 commit/tag；签名/发布仅由受控 CI 执行 |
-| 迁移/回滚 | `cd services/api-server && .venv/bin/alembic upgrade head`；[migrations](project-memory/runbooks/migrations.md)、[rollback](project-memory/runbooks/rollback.md) | 数据模型或部署变更 | 先备份，验证升级、恢复和兼容窗口 |
+| 迁移/回滚 | `cd services/api-server && .venv/bin/alembic upgrade head`；[migrations](operations/runbooks/migrations.md)、[rollback](operations/runbooks/rollback.md) | 数据模型或部署变更 | 先备份，验证升级、恢复和兼容窗口 |
 
 ## 6. 契约、数据和运行边界
 
 - 对外契约权威源：运行中的 FastAPI 路由与 Pydantic 模型、`docs/contracts/api/openapi.yaml`、事件/数据库规格；生成入口为 `scripts/generate-api-docs.py`。
-- 生成物与人工指南：`docs/contracts/api-reference/` 是生成快照，`docs/project-memory/runbooks/` 是操作指南；生成文件不手工修补。
+- 生成物与人工指南：`docs/contracts/api-reference/` 是生成快照，`docs/operations/runbooks/` 是操作指南；生成文件不手工修补。
 - Schema/数据变更门禁：Alembic 单头、迁移 ID 检查、PostgreSQL 升级、备份/恢复与 `scripts/validate-docs.py`。
 - 发布与运行边界：Compose/Helm/CI 配置、`/api/health/readiness`、Agent Run smoke 和可观测栈；生产发布需授权。
 - 敏感信息边界：不读取或提交 `.env`、API key、JWT、密码、Cookie、私钥和完整签名 URL；模型密钥只由服务端/安全存储持有。
@@ -84,9 +84,10 @@ Forge Harness 是一个私有部署的企业 AI 控制面，把基础模型包�
 | 项目规则 | `AGENTS.md` |
 | 项目入口 | `README.md`、`docs/development/ai/agent-startup-context.md` |
 | 测试入口 | `services/api-server/tests/`、`apps/agent-console/src/**/__tests__/`、`apps/desktop-app/src/**/__tests__/` |
-| 配置说明 | `.env.example`、`services/api-server/.env.example`、`deploy/docker-compose/.env.example`、`docs/project-memory/runbooks/local-development.md` |
+| 配置说明 | `.env.example`、`services/api-server/.env.example`、`deploy/docker-compose/.env.example`、`docs/operations/runbooks/local-development.md` |
 | 架构文档 | `docs/architecture/`（如启用） |
 | 设计文档 | `docs/design/` 或 `DESIGN.md`（如启用） |
+| 功能清单与成熟度 | `docs/development/ai/feature-catalog.json`、`docs/FEATURE-MATRIX.md` |
 | 长期操作记忆 | `docs/project-memory/` |
 | 任务状态 | `docs/TASKS.md` |
 | 当前任务上下文 | `docs/WORKING-CONTEXT.md` |

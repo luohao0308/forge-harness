@@ -25,6 +25,28 @@ and support guidance lives in:
 
 ## Local Launch
 
+### Managed runtime mode (self-contained)
+
+The unpackaged app resolves the bundled harnessd sidecar and renderer from the
+project's own `resources/` and `dist/` trees, so no external API server or dev
+console is required:
+
+```bash
+cd apps/desktop-app
+npm run build:main
+npm run build:renderer
+HARNESS_DESKTOP_USE_PACKAGED_RENDERER=1 HARNESS_DESKTOP_RUNTIME_MODE=local \
+NO_PROXY=localhost,127.0.0.1 ELECTRON_RUN_AS_NODE= npm start
+```
+
+Override the discovered paths only when needed: `HARNESSD_DEV_EXECUTABLE`
+(specific harnessd binary) and `HARNESSD_STATIC_DIR` (renderer directory).
+If the sidecar exits before readiness, the launch error now includes the tail
+of harnessd stderr; the full JSON log stays at
+`~/Library/Application Support/@harness/desktop-app/runtime/logs/harnessd.jsonl`.
+
+### Dev server mode (live-reload console)
+
 Start the API and Agent Console first:
 
 ```bash
@@ -62,7 +84,10 @@ npm run check:startup-budget
 
 The packaged startup gate writes
 `dist/startup-budget-report-<platform>-<arch>.json`. It requires a desktop
-session; Linux CI runs it through Xvfb.
+session; Linux CI runs it through Xvfb. Release CI downloads the three platform
+artifacts into separate directories, validates them again with
+`scripts/validate-startup-budget-artifacts.mjs`, and publishes one
+`desktop-startup-evidence.json` summary before GitHub Release creation.
 
 The full production desktop matrix is documented in
 `docs/development/desktop/README.md#verification-matrix`.
@@ -83,13 +108,16 @@ The full production desktop matrix is documented in
   budgets, report schema, and smoke-mode detection.
 - `scripts/check-startup-budget.mjs`: isolated packaged startup samples and
   P50/P95 release gate.
+- `scripts/validate-startup-budget-artifacts.mjs`: cross-platform artifact
+  identity, sample-count, aggregate-integrity, and P95 release gate.
 
 ## Local Pitfalls
 
 - `ELECTRON_RUN_AS_NODE=1` makes Electron run as Node. Clear it for real
   Electron smoke tests.
-- `electron-builder --dir` rebuilds native modules for Electron ABI. Rebuild
-  `better-sqlite3` for Node before running Node/Vitest tests again if ABI errors
-  appear.
+- Desktop packaging runs a forced `better-sqlite3` rebuild for the Electron ABI
+  before `electron-builder`; its incremental native-dependency pass does not
+  reliably replace a binary last compiled by Node 24. Rebuild `better-sqlite3`
+  for Node before running Node/Vitest tests again if ABI errors appear.
 - Local unsigned macOS packages are not production notarization evidence. CI
   must provide Developer ID and notarization credentials for that claim.

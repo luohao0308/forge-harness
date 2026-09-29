@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, ArrowRight, Bot, CheckCircle2, Circle, Crown, ListTodo, UsersRound } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, Bot, Crown, UsersRound } from "lucide-react";
 
 import { Badge } from "../../../../components/ui/badge";
 import { cn } from "../../../../lib/utils";
@@ -52,7 +52,6 @@ export function DesktopTeamOverview({
 }) {
   const visibleTasks = tasks.filter((task) => task.status !== "deleted");
   const completedTasks = visibleTasks.filter((task) => task.status === "completed");
-  const activeTasks = visibleTasks.filter((task) => task.status === "in_progress");
   const blockedTasks = visibleTasks.filter((task) => task.blocked_by_json.length > 0 && task.status !== "completed");
   const failedAgents = agents.filter((agent) => agent.status === "failed");
   const recentMessages = [...messages]
@@ -71,9 +70,9 @@ export function DesktopTeamOverview({
     <section
       data-testid="desktop-team-overview"
       aria-label={text("团队概览", "Team overview")}
-      className="h-full min-h-0 overflow-auto bg-white"
+      className="h-full min-h-0 overflow-auto bg-ui-page"
     >
-      <div className="mx-auto flex min-h-full w-full max-w-[1180px] flex-col px-5 py-5 lg:px-8">
+      <div className="mx-auto flex min-h-full w-full max-w-[960px] flex-col px-5 py-5 lg:px-8">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-5">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
@@ -92,7 +91,25 @@ export function DesktopTeamOverview({
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 gap-8 py-6 lg:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="grid grid-cols-1 border-b border-slate-100 sm:grid-cols-3">
+          <div className="py-3 sm:border-r sm:border-slate-100 sm:px-4 sm:first:pl-0">
+            <div className="text-[11px] text-slate-500">{text("当前目标", "Current goal")}</div>
+            <div className="mt-1 truncate text-xs font-semibold text-slate-900">{goal ? goalStatusLabel(goal.status, text) : text("未设置", "Not set")}</div>
+          </div>
+          <div className="border-t border-slate-100 py-3 sm:border-r sm:border-t-0 sm:px-4">
+            <div className="text-[11px] text-slate-500">{text("任务进度", "Task progress")}</div>
+            <div className="mt-1 text-xs font-semibold tabular-nums text-slate-900">{goalTotal ? `${goalCompleted}/${goalTotal}` : "-"}</div>
+          </div>
+          <div className="border-t border-slate-100 py-3 sm:border-t-0 sm:pl-4">
+            <div className="text-[11px] text-slate-500">{text("需要关注", "Needs attention")}</div>
+            <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-slate-900">
+              {blockedTasks.length || failedAgents.length ? <AlertTriangle aria-hidden="true" className="h-3.5 w-3.5 text-amber-500" /> : null}
+              {blockedTasks.length + failedAgents.length || text("暂无异常", "No issues")}
+            </div>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 py-6">
           <div className="min-w-0 space-y-7">
             <section aria-labelledby="desktop-team-member-progress-heading">
               <div className="mb-3 flex items-center justify-between gap-3">
@@ -166,15 +183,6 @@ export function DesktopTeamOverview({
             </section>
           </div>
 
-          <aside aria-label={text("团队系统看板", "Team system board")} className="border-l border-slate-100 pl-6">
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-900"><ListTodo aria-hidden="true" className="h-3.5 w-3.5 text-slate-500" />{text("系统看板", "System board")}</div>
-            <div className="mt-4 space-y-4 text-xs">
-              <div className="border-b border-slate-100 pb-3"><div className="text-[11px] text-slate-500">{text("当前目标", "Current goal")}</div><div className="mt-1 flex items-center justify-between gap-2"><span className="font-semibold text-slate-900">{goal ? goalStatusLabel(goal.status, text) : text("未设置", "Not set")}</span><span className="tabular-nums text-slate-500">{goalTotal ? `${goalCompleted}/${goalTotal}` : "-"}</span></div></div>
-              <div className="border-b border-slate-100 pb-3"><div className="text-[11px] text-slate-500">{text("任务", "Tasks")}</div><div className="mt-1 flex items-center justify-between"><span className="text-slate-700">{text("进行中", "In progress")}</span><Badge className="px-1.5 py-0 text-[10px]" tone="running">{activeTasks.length}</Badge></div><div className="mt-1 flex items-center justify-between"><span className="text-slate-700">{text("已完成", "Completed")}</span><Badge className="px-1.5 py-0 text-[10px]" tone="success">{completedTasks.length}</Badge></div></div>
-              <div className="border-b border-slate-100 pb-3"><div className="text-[11px] text-slate-500">{text("需要关注", "Needs attention")}</div>{blockedTasks.length || failedAgents.length ? <div className="mt-2 space-y-1.5 text-slate-700"><div className="flex items-center gap-2"><AlertTriangle aria-hidden="true" className="h-3.5 w-3.5 text-amber-500" />{blockedTasks.length} {text("项任务受阻", "blocked tasks")}</div><div className="flex items-center gap-2"><AlertTriangle aria-hidden="true" className="h-3.5 w-3.5 text-red-500" />{failedAgents.length} {text("名成员失败", "failed members")}</div></div> : <div className="mt-2 flex items-center gap-2 text-slate-600"><CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5 text-emerald-500" />{text("暂无异常", "No issues")}</div>}</div>
-              <div><div className="text-[11px] text-slate-500">{text("状态说明", "Status legend")}</div><div className="mt-2 space-y-1.5 text-slate-600"><div className="flex items-center gap-2"><Circle aria-hidden="true" className="h-3 w-3 text-blue-500" />{text("执行中 / 待命", "Running / idle")}</div><div className="flex items-center gap-2"><Circle aria-hidden="true" className="h-3 w-3 text-emerald-500" />{text("已完成", "Completed")}</div></div></div>
-            </div>
-          </aside>
         </div>
       </div>
     </section>

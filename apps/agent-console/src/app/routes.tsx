@@ -1,6 +1,6 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { createBrowserRouter, createHashRouter, Navigate, useLocation } from "react-router-dom";
+import { createBrowserRouter, createHashRouter, Navigate, useLocation, useParams } from "react-router-dom";
 
 import { RouteErrorBoundary } from "../components/RouteErrorBoundary";
 import { RouteSkeleton } from "../components/ui/RouteSkeleton";
@@ -10,6 +10,8 @@ import { isLocalRuntimeProfile } from "../lib/local-runtime";
 
 const AgentListPage = lazy(() => import("../features/agents/pages/AgentListPage").then((module) => ({ default: module.AgentListPage })));
 const AgentWorkspacePage = lazy(() => import("../features/agents/pages/AgentWorkspacePage").then((module) => ({ default: module.AgentWorkspacePage })));
+const AttentionCenterPage = lazy(() => import("../features/attention/pages/AttentionCenterPage").then((module) => ({ default: module.AttentionCenterPage })));
+const ChangeReviewPage = lazy(() => import("../features/changes/pages/ChangeReviewPage").then((module) => ({ default: module.ChangeReviewPage })));
 const LoginPage = lazy(() => import("../features/auth/pages/LoginPage").then((module) => ({ default: module.LoginPage })));
 const OAuthCallbackPage = lazy(() => import("../features/auth/pages/OAuthCallbackPage").then((module) => ({ default: module.OAuthCallbackPage })));
 const RegisterPage = lazy(() => import("../features/auth/pages/RegisterPage").then((module) => ({ default: module.RegisterPage })));
@@ -24,6 +26,11 @@ const ObservabilityPage = lazy(() => import("../features/observability/pages/Obs
 const TokenSavingsPage = lazy(() => import("../features/observability/pages/TokenSavingsPage").then((module) => ({ default: module.TokenSavingsPage })));
 const TraceExplorerPage = lazy(() => import("../features/observability/pages/TraceExplorerPage").then((module) => ({ default: module.TraceExplorerPage })));
 const SandboxesPage = lazy(() => import("../features/sandboxes/pages/SandboxesPage").then((module) => ({ default: module.SandboxesPage })));
+const SettingsHubPage = lazy(() => import("../features/settings/pages/SettingsHubPage").then((module) => ({ default: module.SettingsHubPage })));
+const EnvironmentSettingsPage = lazy(() => import("../features/settings/pages/EnvironmentSettingsPage").then((module) => ({ default: module.EnvironmentSettingsPage })));
+const WorktreesSettingsPage = lazy(() => import("../features/settings/pages/WorktreesSettingsPage").then((module) => ({ default: module.WorktreesSettingsPage })));
+const IntegrationsSettingsPage = lazy(() => import("../features/settings/pages/IntegrationsSettingsPage").then((module) => ({ default: module.IntegrationsSettingsPage })));
+const VoiceSettingsPage = lazy(() => import("../features/settings/pages/VoiceSettingsPage").then((module) => ({ default: module.VoiceSettingsPage })));
 const AdvancedFeaturesPage = lazy(() => import("../features/settings/pages/AdvancedFeaturesPage").then((module) => ({ default: module.AdvancedFeaturesPage })));
 const DesktopSettingsRoutePage = lazy(() => import("../features/settings/pages/DesktopSettingsRoutePage").then((module) => ({ default: module.DesktopSettingsRoutePage })));
 const ApiKeysPage = lazy(() => import("../features/settings/pages/ApiKeysPage").then((module) => ({ default: module.ApiKeysPage })));
@@ -65,6 +72,8 @@ export const router = createConsoleRouter([
       { path: "agents", element: protectedElement(<AgentListPage />) },
       { path: "agents/:agentId/workspace", element: protectedElement(<AgentWorkspacePage />) },
       { path: "agents/:agentId/chat", element: <Navigate to="/agents/default/workspace" replace /> },
+      { path: "attention", element: protectedElement(<AttentionCenterPage />) },
+      { path: "changes", element: protectedElement(<ChangeReviewPage />) },
       { path: "teams", element: protectedElement(<TeamListPage />) },
       { path: "teams/:teamId", element: protectedElement(<TeamPage />) },
       { path: "runs", element: protectedElement(<RunHistoryPage />) },
@@ -73,6 +82,8 @@ export const router = createConsoleRouter([
       { path: "runs/:runId/subagents", element: protectedElement(<RunDetailPage focus="subagents" />) },
       { path: "tasks", element: <Navigate to="/runs" replace /> },
       { path: "subagents", element: protectedElement(<SubagentsPage />) },
+      { path: "subagents/specialists", element: <LegacyPathRedirect to="/subagent-specialists" /> },
+      { path: "subagents/specialists/:specialistId", element: <LegacySpecialistDetailRedirect /> },
       { path: "subagents/:subagentId", element: protectedElement(<SubagentDetailPage />) },
       { path: "subagent-specialists", element: protectedElement(<SubagentSpecialistsPage />) },
       { path: "subagent-specialists/:specialistId", element: protectedElement(<SubagentSpecialistDetailPage />) },
@@ -91,6 +102,11 @@ export const router = createConsoleRouter([
       { path: "evals", element: protectedElement(<EvalHarnessPage />) },
       { path: "help", element: protectedElement(<HelpCenterPage />) },
       { path: "help/troubleshooting", element: protectedElement(<HelpCenterPage />) },
+      { path: "settings", element: protectedElement(<SettingsHubPage />) },
+      { path: "settings/environment", element: protectedElement(<EnvironmentSettingsPage />) },
+      { path: "settings/worktrees", element: protectedElement(<WorktreesSettingsPage />) },
+      { path: "settings/integrations", element: protectedElement(<IntegrationsSettingsPage />) },
+      { path: "settings/voice", element: protectedElement(<VoiceSettingsPage />) },
       { path: "settings/models", element: protectedElement(<ModelSettingsPage />) },
       { path: "settings/advanced", element: protectedElement(<AdvancedFeaturesPage />) },
       { path: "settings/secrets", element: protectedElement(<SecretVaultPage />) },
@@ -98,6 +114,7 @@ export const router = createConsoleRouter([
       { path: "settings/users", element: protectedElement(<UserManagementPage />) },
       { path: "settings/api-keys", element: protectedElement(<ApiKeysPage />) },
       { path: "settings/audit", element: protectedElement(<AuditLogPage />) },
+      { path: "settings/data", element: <LegacyPathRedirect to="/settings/data-management" /> },
       { path: "settings/data-management", element: protectedElement(<DataManagementPage />) },
       { path: "settings/frontend-errors", element: protectedElement(<FrontendErrorsPage />) },
       { path: "terminal", element: protectedElement(<TerminalWorkspace />) },
@@ -111,6 +128,20 @@ function routeElement(element: ReactNode) {
 
 export function LegacyModelSetupRedirect() {
   return <Navigate to="/desktop?section=models" replace />;
+}
+
+export function LegacyPathRedirect({ to }: { to: string }) {
+  const location = useLocation();
+  return <Navigate to={`${to}${location.search}${location.hash}`} replace />;
+}
+
+export function LegacySpecialistDetailRedirect() {
+  const location = useLocation();
+  const { specialistId } = useParams();
+  const target = specialistId
+    ? `/subagent-specialists/${encodeURIComponent(specialistId)}`
+    : "/subagent-specialists";
+  return <Navigate to={`${target}${location.search}${location.hash}`} replace />;
 }
 
 function protectedElement(element: ReactNode) {

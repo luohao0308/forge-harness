@@ -58,6 +58,7 @@ class ModelRequest(BaseModel):
     model_name: str
     messages: list[ModelMessage]
     response_format: str = "json"
+    reasoning_effort: str | None = None
 
 
 class ModelResponse(BaseModel):
@@ -599,6 +600,7 @@ class OpenAICompatibleModelGateway:
         temperature: float = 0.2,
         include_stream_usage: bool = True,
         max_tokens: int | None = None,
+        supports_reasoning_effort: bool = False,
     ) -> None:
         settings = get_settings()
         self.base_url = str(base_url or settings.model_gateway_base_url)
@@ -607,6 +609,7 @@ class OpenAICompatibleModelGateway:
         self.temperature = temperature
         self.include_stream_usage = include_stream_usage
         self.max_tokens = max_tokens
+        self.supports_reasoning_effort = supports_reasoning_effort
 
     def complete(self, request_payload: ModelRequest) -> ModelResponse:
         started_at = time.monotonic()
@@ -933,6 +936,8 @@ class OpenAICompatibleModelGateway:
         }
         if self.max_tokens is not None:
             payload["max_tokens"] = self.max_tokens
+        if self.supports_reasoning_effort and request_payload.reasoning_effort:
+            payload["reasoning_effort"] = request_payload.reasoning_effort
         response_format = self._response_format_payload(request_payload.response_format)
         if response_format is not None:
             payload["response_format"] = response_format
@@ -1475,7 +1480,11 @@ class AuditedModelGateway:
             if isinstance(key, str) and value not in (None, [], {})
         }
 
-    def _generation_parameters(self, provider: dict) -> dict:
+    def _generation_parameters(
+        self,
+        provider: dict,
+        request_payload: ModelRequest | None = None,
+    ) -> dict:
         parameters: dict = {}
         if provider.get("max_output_tokens") is not None:
             parameters["max_tokens"] = int(provider.get("max_output_tokens") or 0)
@@ -1483,6 +1492,10 @@ class AuditedModelGateway:
             parameters["temperature"] = provider.get("temperature")
         if provider.get("top_p") is not None:
             parameters["top_p"] = provider.get("top_p")
+        if provider.get("supports_reasoning_effort") is True and request_payload is not None:
+            requested = request_payload.reasoning_effort
+            if isinstance(requested, str) and requested:
+                parameters["reasoning_effort"] = requested
         return parameters
 
     def _request_message_hashes(self, request_payload: ModelRequest) -> list[dict]:
@@ -1588,7 +1601,7 @@ class AuditedModelGateway:
         estimated_prompt_tokens = self._estimate_prompt_tokens(request_payload)
         gateway = self.gateway or self._gateway_from_settings(settings)
         started_at = time.monotonic()
-        generation_parameters = self._generation_parameters(settings.provider)
+        generation_parameters = self._generation_parameters(settings.provider, request_payload)
         request_message_hashes = self._request_message_hashes(request_payload)
         request_message_hashes_sha256 = self._request_message_hashes_sha256(request_message_hashes)
         model_request_sha256 = self._model_request_sha256(
@@ -2332,4 +2345,5 @@ def model_gateway_for_provider(
         temperature=temperature,
         include_stream_usage=bool(provider.get("include_stream_usage", True)),
         max_tokens=configured_max_tokens,
+        supports_reasoning_effort=provider.get("supports_reasoning_effort") is True,
     )

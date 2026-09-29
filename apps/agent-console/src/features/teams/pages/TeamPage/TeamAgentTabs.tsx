@@ -54,7 +54,7 @@ export function TeamAgentTabs({
   onDropAgentTab: (slotId: string) => void;
 }) {
   return (
-    <div className="relative flex h-10 min-h-10 items-center gap-2 border-b border-slate-200 bg-white px-0 after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:w-5 after:bg-gradient-to-l after:from-white after:to-transparent md:after:hidden">
+    <div className="glass-surface relative flex h-10 min-h-10 items-center gap-2 border-b border-ui-border/70 px-0 after:pointer-events-none after:absolute after:inset-y-0 after:right-0 after:w-5 after:bg-gradient-to-l after:from-white/80 after:to-transparent md:after:hidden">
       <div
         role="tablist"
         data-testid="team-tab-bar"

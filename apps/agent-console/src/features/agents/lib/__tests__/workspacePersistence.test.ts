@@ -2,7 +2,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { ConversationNode } from "../../../../stores/workspaceStore";
-import { readWorkspaceRegistrySnapshot, saveWorkspaceRegistrySnapshot } from "../../../../stores/workspaceRegistryPersistence";
+import {
+  readWorkspaceRegistrySnapshot,
+  saveWorkspaceRegistrySnapshot,
+  type WorkspaceRegistrySnapshot,
+} from "../../../../stores/workspaceRegistryPersistence";
 import {
   readAutoCompressionRatio,
   readContextMaxTokens,
@@ -52,7 +56,7 @@ describe("workspace persistence migration", () => {
   it("writes workspace registry only to the scoped key and migrates legacy reads", () => {
     window.name = "harness-workspace-scope:scope-a";
     const scopeId = getWorkspaceScopeId();
-    const snapshot = {
+    const snapshot: WorkspaceRegistrySnapshot = {
       activeWorkspaceId: "scope-a::default",
       workspaceRegistry: {
         "scope-a::default": {
@@ -62,6 +66,8 @@ describe("workspace persistence migration", () => {
             autoCompressionRatio: 0.5,
             historyPanelCollapsed: true,
             localFileRootPath: null,
+            reasoningEffort: "high",
+            permissionMode: "confirm",
           },
         },
       },
@@ -174,7 +180,7 @@ describe("workspace persistence migration", () => {
   it("persists workspace registry file-root config through the scoped registry snapshot", () => {
     window.name = "harness-workspace-scope:scope-a";
     const scopeId = getWorkspaceScopeId();
-    const snapshot = {
+    const snapshot: WorkspaceRegistrySnapshot = {
       activeWorkspaceId: "default",
       workspaceRegistry: {
         default: {
@@ -184,6 +190,8 @@ describe("workspace persistence migration", () => {
             autoCompressionRatio: 0.75,
             historyPanelCollapsed: false,
             localFileRootPath: "/workspace/default",
+            reasoningEffort: "high",
+            permissionMode: "confirm",
           },
         },
       },
@@ -216,7 +224,7 @@ describe("workspace persistence migration", () => {
       },
     };
     resetWorkspaceScopeCache();
-    const snapshot = {
+    const snapshot: WorkspaceRegistrySnapshot = {
       activeWorkspaceId: "default",
       workspaceRegistry: {
         default: {
@@ -226,6 +234,8 @@ describe("workspace persistence migration", () => {
             autoCompressionRatio: 0.75,
             historyPanelCollapsed: false,
             localFileRootPath: "/workspace/default",
+            reasoningEffort: "high",
+            permissionMode: "confirm",
           },
         },
       },
